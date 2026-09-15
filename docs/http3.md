@@ -48,6 +48,8 @@ Alternatively, in this repository's sample server, replace the existing `Kestrel
 
 Use one configuration approach; do not add a second listener on the same port. For local .NET client testing, provision a development certificate with `dotnet dev-certs https --trust` where supported. In production, configure the default Kestrel certificate through your deployment's secret/certificate provider; do not commit private keys or passwords.
 
+Use a concrete port for a combined HTTP/2 + HTTP/3 endpoint. Kestrel does not support sharing a dynamically allocated port (`0`) between its TCP and QUIC transports.
+
 See [Kestrel HTTP/3 configuration](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/http3?view=aspnetcore-10.0).
 
 ## GrpcEmbed contract client (1.0.0)

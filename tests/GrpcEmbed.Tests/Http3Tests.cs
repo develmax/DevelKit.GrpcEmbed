@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Quic;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Grpc.Core;
@@ -46,7 +47,12 @@ public sealed class Http3Tests(ITestOutputHelper output)
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
         // Ignore sample appsettings copied to the test output; bind only the isolated test endpoint.
         builder.Configuration.Sources.Clear();
-        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0, listen =>
+        // Kestrel cannot share port 0 between TCP and QUIC. Select a concrete port first.
+        using var portProbe = new TcpListener(IPAddress.Loopback, 0);
+        portProbe.Start();
+        var port = ((IPEndPoint)portProbe.LocalEndpoint).Port;
+        portProbe.Stop();
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, port, listen =>
         {
             listen.Protocols = version.Major == 3 ? HttpProtocols.Http2 | HttpProtocols.Http3 : HttpProtocols.Http2;
             listen.UseHttps(certificate);
