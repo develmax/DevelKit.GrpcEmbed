@@ -1,7 +1,7 @@
-# Политика безопасности
+# Security Policy
 
-Не публикуйте сведения об уязвимостях в открытых issues.
+Do not disclose vulnerability details in public issues.
 
-Используйте GitHub Security Advisories в репозитории для приватного сообщения владельцу проекта. Укажите затронутую версию, способ воспроизведения и возможное влияние.
+Use GitHub Security Advisories in this repository to privately report vulnerabilities to the project owner. Include the affected version, steps to reproduce, and potential impact.
 
-Исправления безопасности выпускаются для последней поддерживаемой версии.
+Security fixes are released for the latest supported version.
