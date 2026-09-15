@@ -125,6 +125,8 @@ A reverse proxy may accept HTTP/3 from the client but forward HTTP/2 to GrpcEmbe
 
 ## Verification
 
+Verified on **2026-09-15**, Windows Server 2025 (build 26100), .NET 10.0.12, at commit `85d8170`: [CI job and detailed transport log](https://github.com/develmax/DevelKit.GrpcEmbed/actions/runs/34973795138/job/104396306490). All 22 tests passed with no skips. The additional required transport run passed both tests and recorded `HTTP/3, HTTP/3, HTTP/3, HTTP/3` for the generated client and contract proxy. HTTP/2 also passed. This establishes loopback interoperability on that environment, not a performance claim or validation of every OS, runtime, proxy, and deployment.
+
 The [transport tests](../tests/GrpcEmbed.Tests/Http3Tests.cs) start a real loopback Kestrel HTTPS listener with a short-lived, test-pinned certificate. They exercise both a generated client and the GrpcEmbed contract proxy, verify DTO values and `NotFound` gRPC statuses, and assert that **all four requests arrive as `HTTP/3`**. A separate test checks HTTP/2. These are network integration tests, not TestServer simulations or performance benchmarks.
 
 ```powershell
