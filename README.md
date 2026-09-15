@@ -6,6 +6,8 @@
 
 Native gRPC for existing ASP.NET Core MVC APIs.
 
+HTTP/2 by default, with opt-in HTTP/3 support. See [transport support](#transport-support-http2-and-http3).
+
 NuGet package: `DevelKit.GrpcEmbed`.
 
 [![CI](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/ci.yml/badge.svg)](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/ci.yml)
@@ -54,9 +56,12 @@ This exposes `/_grpcembed/schema.proto`, `/_grpcembed/descriptor.pb`, `/_grpcemb
 
 For deliberate schema evolution, use `[GrpcFieldNumber(n)]` to preserve a field or parameter wire ID across a rename, and `[GrpcReservedField(n)]` on DTO types when removing fields. Reserved numbers are emitted into both `.proto` and the binary descriptor set.
 
-## HTTP/3
+## Transport support: HTTP/2 and HTTP/3
 
-GrpcEmbed can use HTTP/3 through its ASP.NET Core and .NET gRPC transports, without changing controllers or protobuf contracts. It requires HTTPS, platform QUIC support, and explicit client configuration; the sample defaults to HTTP/2.
+- **HTTP/2 (default):** the standard transport used by the GrpcEmbed client and sample server. Both generated clients and the contract proxy are covered by real-network HTTP/2 tests. The sample uses cleartext HTTP/2 locally; use HTTPS in production.
+- **HTTP/3 (opt-in):** available through the same ASP.NET Core and .NET gRPC transports, without changing controllers or protobuf contracts. Requires HTTPS, platform QUIC support, and explicit client configuration. Both client variants have passed real-network HTTP/3 tests on Windows Server 2025 / .NET 10.0.12.
+
+HTTP/3 is not enabled automatically. Existing HTTP/2 applications can keep their current configuration.
 
 See the [HTTP/3 setup and verification guide](https://github.com/develmax/DevelKit.GrpcEmbed/blob/main/docs/http3.md) for server settings, the existing 1.0.0 contract-client API, generated clients, HTTP/2 compatibility, and real-network tests.
 
