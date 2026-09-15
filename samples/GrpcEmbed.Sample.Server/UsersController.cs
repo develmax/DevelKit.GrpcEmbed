@@ -20,6 +20,7 @@ public sealed class UsersController : ControllerBase
     public Task<UserDto> Get(int id, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref InvocationCount);
+        Response.Headers["x-total-count"] = "1";
         return Task.FromResult(new UserDto { Id = id, Name = "Test" });
     }
 
@@ -104,6 +105,7 @@ public sealed class UserStateDto { public int Id { get; set; } public UserState 
 public sealed class CountActionAttribute : ActionFilterAttribute
 {
     public override void OnActionExecuting(ActionExecutingContext context) => Interlocked.Increment(ref UsersController.FilterCount);
+    public override void OnResultExecuting(ResultExecutingContext context) => context.HttpContext.Response.Headers["x-result-filter"] = "completed";
 }
 
 public sealed class HeaderAuthorizationAttribute : Attribute, IAuthorizationFilter

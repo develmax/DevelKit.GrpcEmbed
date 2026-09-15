@@ -65,6 +65,11 @@ public sealed class Http3Tests(ITestOutputHelper output)
         app.Use(async (context, next) =>
         {
             protocols.Enqueue(context.Request.Protocol);
+            context.Response.OnStarting(() =>
+            {
+                context.Response.Headers["x-on-starting"] = "completed";
+                return Task.CompletedTask;
+            });
             await next(context);
         });
         app.MapGrpcEmbed();
@@ -88,21 +93,31 @@ public sealed class Http3Tests(ITestOutputHelper output)
                 HttpVersionPolicy = HttpVersionPolicy.RequestVersionExact
             });
             var generated = new Users.UsersClient(channel);
-            var user = await generated.GetAsync(new Users_Get_Request { Id = 42 }, cancellationToken: timeout.Token);
+            using var getCall = generated.GetAsync(new Users_Get_Request { Id = 42 }, cancellationToken: timeout.Token);
+            var user = await getCall.ResponseAsync;
+            var headers = await getCall.ResponseHeadersAsync;
+            Assert.Equal("1", headers.GetValue("x-total-count"));
+            Assert.Equal("completed", headers.GetValue("x-result-filter"));
+            Assert.Equal("completed", headers.GetValue("x-on-starting"));
+            Assert.Matches("^[A-Fa-f0-9]{64}$", headers.GetValue("grpcembed-schema-hash")!);
             Assert.Equal(42, user.Id);
             Assert.Equal("Test", user.Name);
-            var missing = await Assert.ThrowsAsync<RpcException>(async () =>
-                await generated.MissingAsync(new Users_Missing_Request { Id = 99 }, cancellationToken: timeout.Token));
+            using var missingCall = generated.MissingAsync(new Users_Missing_Request { Id = 99 }, cancellationToken: timeout.Token);
+            var missing = await Assert.ThrowsAsync<RpcException>(async () => await missingCall.ResponseAsync);
             Assert.Equal(StatusCode.NotFound, missing.StatusCode);
+            Assert.Equal(headers.GetValue("grpcembed-schema-hash"), (await missingCall.ResponseHeadersAsync).GetValue("grpcembed-schema-hash"));
 
             // Exercise the existing 1.0 client API, as documented in docs/http3.md.
             using var handler = new ExactVersionHandler(version) { InnerHandler = CreateTransport() };
             var services = new ServiceCollection();
+            GrpcEmbedClientOptions? proxyOptions = null;
             services.AddGrpcEmbedClient<IUsersApi>(options =>
             {
+                proxyOptions = options;
                 options.Address = new Uri(address);
                 options.HttpHandler = handler;
                 options.DefaultTimeout = TimeSpan.FromSeconds(15);
+                options.ExpectedSchemaHash = headers.GetValue("grpcembed-schema-hash");
             });
             using var provider = services.BuildServiceProvider();
             var proxy = provider.GetRequiredService<IUsersApi>();
@@ -113,6 +128,13 @@ public sealed class Http3Tests(ITestOutputHelper output)
             Assert.Equal(StatusCode.NotFound, proxyMissing.StatusCode);
 
             Assert.Equal(4, protocols.Count);
+            // Verify deadlines on a real transport: TestServer cannot model HTTP stream resets reliably.
+            using var deadlineCall = generated.DelayAsync(new Users_Delay_Request { Id = 1 }, deadline: DateTime.UtcNow.AddMilliseconds(200));
+            var deadlineError = await Assert.ThrowsAsync<RpcException>(async () => await deadlineCall.ResponseAsync);
+            Assert.Equal(StatusCode.DeadlineExceeded, deadlineError.StatusCode);
+            proxyOptions!.DefaultTimeout = TimeSpan.FromMilliseconds(200);
+            var proxyDeadline = await Assert.ThrowsAsync<RpcException>(() => proxy.Delay(1, timeout.Token));
+            Assert.Equal(StatusCode.DeadlineExceeded, proxyDeadline.StatusCode);
             Assert.All(protocols, protocol => Assert.Equal($"HTTP/{version.Major}", protocol));
             output.WriteLine($"{System.Runtime.InteropServices.RuntimeInformation.OSDescription}; {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
             output.WriteLine($"Generated client + contract proxy: DTOs and NotFound trailers passed; server protocols: {string.Join(", ", protocols)}");
@@ -129,6 +151,7 @@ public sealed class Http3Tests(ITestOutputHelper output)
     {
         Task<Sample.Server.UserDto> Get(int id, CancellationToken cancellationToken = default);
         Task<Sample.Server.UserDto> Missing(int id, CancellationToken cancellationToken = default);
+        Task<Sample.Server.UserDto> Delay(int id, CancellationToken cancellationToken = default);
     }
 
     private sealed class ExactVersionHandler(Version version) : DelegatingHandler

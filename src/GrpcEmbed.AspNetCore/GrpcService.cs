@@ -28,7 +28,9 @@ internal sealed class GrpcEmbedService
         where TRequest : class where TResponse : class
     {
         var http = call.GetHttpContext();
-        await call.WriteResponseHeadersAsync(new Metadata { { "grpcembed-schema-hash", _registry.GetSchema(_services).Sha256 } });
+        // Queue metadata without starting the response. MVC actions, filters, and OnStarting
+        // callbacks must still be able to add headers before Grpc.AspNetCore writes the result.
+        http.Response.Headers["grpcembed-schema-hash"] = _registry.GetSchema(_services).Sha256;
         var actionContext = new ActionContext(http, new Microsoft.AspNetCore.Routing.RouteData(), method.Action);
         var controllerContext = new ControllerContext(actionContext);
         var controller = _controllers.CreateController(controllerContext);
