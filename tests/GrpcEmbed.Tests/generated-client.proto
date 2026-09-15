@@ -1,0 +1,18 @@
+syntax = "proto3";
+package GrpcEmbed;
+option csharp_namespace = "GrpcEmbed.Tests.Generated";
+
+message Users_Get_Request { int32 id = 121987495; }
+message Users_Missing_Request { int32 id = 121987495; }
+message Users_Secure_Request { int32 id = 121987495; }
+message Users_Delay_Request { int32 id = 121987495; }
+message CreateUserRequest { string name = 47567326; }
+message Users_Create_Request { CreateUserRequest request = 347691040; }
+message UserDto { string name = 47567326; int32 id = 309204247; }
+service Users {
+  rpc Get (Users_Get_Request) returns (UserDto);
+  rpc Create (Users_Create_Request) returns (UserDto);
+  rpc Missing (Users_Missing_Request) returns (UserDto);
+  rpc Secure (Users_Secure_Request) returns (UserDto);
+  rpc Delay (Users_Delay_Request) returns (UserDto);
+}

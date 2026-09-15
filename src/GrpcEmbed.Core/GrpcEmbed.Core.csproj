@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFrameworks>net6.0;net7.0;net8.0;net9.0;net10.0</TargetFrameworks><PackageId>DevelKit.GrpcEmbed.Core</PackageId><Description>Runtime Protocol Buffers model for GrpcEmbed.</Description></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../GrpcEmbed.Abstractions/GrpcEmbed.Abstractions.csproj" />
+    <PackageReference Include="protobuf-net" Version="3.2.56" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GrpcEmbed/GrpcEmbed.csproj" />
+    <Project Path="src/GrpcEmbed.Abstractions/GrpcEmbed.Abstractions.csproj" />
+    <Project Path="src/GrpcEmbed.Core/GrpcEmbed.Core.csproj" />
+    <Project Path="src/GrpcEmbed.AspNetCore/GrpcEmbed.AspNetCore.csproj" />
+    <Project Path="src/GrpcEmbed.Client/GrpcEmbed.Client.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/GrpcEmbed.Sample.Server/GrpcEmbed.Sample.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GrpcEmbed.Tests/GrpcEmbed.Tests.csproj" />
+  </Folder>
+</Solution>

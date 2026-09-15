@@ -1,0 +1,12 @@
+syntax = "proto3";
+package GrpcEmbed;
+option csharp_namespace = "GrpcEmbed.Benchmarks.Generated";
+
+message Users_Get_Request { int32 id = 121987495; }
+message UserDto { string name = 47567326; int32 id = 309204247; }
+service Users { rpc Get (Users_Get_Request) returns (UserDto); }
+
+message Echo_Send_Request { PayloadDto request = 347691040; }
+message PayloadDto { string value = 496318352; }
+service Echo { rpc Send (Echo_Send_Request) returns (PayloadDto); }
+service NativeEcho { rpc Send (Echo_Send_Request) returns (PayloadDto); }

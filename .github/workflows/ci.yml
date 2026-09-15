@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore GrpcEmbed.sln
+      - name: Build
+        run: dotnet build GrpcEmbed.sln -c Release --no-restore -m:1 /nodeReuse:false
+      - name: Test
+        run: dotnet test tests/GrpcEmbed.Tests/GrpcEmbed.Tests.csproj -c Release --no-build -m:1 /nodeReuse:false
+
+  pack:
+    runs-on: windows-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore GrpcEmbed.sln
+      - run: dotnet build GrpcEmbed.sln -c Release --no-restore -m:1 /nodeReuse:false
+      - name: Pack 1.0.0
+        shell: pwsh
+        run: |
+          $projects = @(
+            'src/GrpcEmbed.Abstractions/GrpcEmbed.Abstractions.csproj',
+            'src/GrpcEmbed.Core/GrpcEmbed.Core.csproj',
+            'src/GrpcEmbed.AspNetCore/GrpcEmbed.AspNetCore.csproj',
+            'src/GrpcEmbed.Client/GrpcEmbed.Client.csproj',
+            'src/GrpcEmbed/GrpcEmbed.csproj'
+          )
+          foreach ($project in $projects) {
+            dotnet pack $project -c Release --no-build --no-restore -o artifacts/packages
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DevelKit.GrpcEmbed-1.0.0
+          path: artifacts/packages/*.*nupkg
+          if-no-files-found: error

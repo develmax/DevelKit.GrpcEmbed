@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFrameworks>net6.0;net7.0;net8.0;net9.0;net10.0</TargetFrameworks><PackageId>DevelKit.GrpcEmbed.Abstractions</PackageId><Description>Public contracts and configuration for GrpcEmbed.</Description></PropertyGroup>
+</Project>
