@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ## 2.1.0
 
+- Validate resolved contract download URLs as well as gRPC endpoints for HTTPS.
+- Preserve asynchronous disposal of decorated clients, including initialization failures.
 - Added REST-compatible gRPC URLs, configurable Method/ControllerMethod/Native
   addressing, and operation metadata for actions sharing a REST route.
 - Added route/Protobuf argument consistency checks before controller execution.

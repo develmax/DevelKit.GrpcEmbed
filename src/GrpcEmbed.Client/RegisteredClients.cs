@@ -53,7 +53,7 @@ public static class GrpcEmbedRegisteredClientsExtensions
             }
             catch
             {
-                if (ownsOriginal && value is IDisposable disposable) disposable.Dispose();
+                if (ownsOriginal) RegisteredClient<TContract>.DisposeOwned(value);
                 throw;
             }
         });
@@ -66,7 +66,7 @@ public static class GrpcEmbedRegisteredClientsExtensions
     private sealed class RegistrationMarker<TMarker> { }
 }
 
-internal sealed class RegisteredClient<TContract> : IDisposable where TContract : class
+internal sealed class RegisteredClient<TContract> : IDisposable, IAsyncDisposable where TContract : class
 {
     private readonly GrpcChannel? _channel;
     public TContract Client { get; }
@@ -76,7 +76,7 @@ internal sealed class RegisteredClient<TContract> : IDisposable where TContract 
         // In REST mode the returned original is tracked for disposal by the DI container.
         if (options is null) { Client = original; return; }
         // An externally supplied instance must remain externally owned, in either mode.
-        _original = ownsOriginal ? original as IDisposable : null;
+        _original = ownsOriginal ? original : null;
         if (options.Address is null) throw new InvalidOperationException("GrpcEmbed client Address is required.");
         if (options.HttpClient is not null && options.HttpHandler is not null)
             throw new InvalidOperationException("Specify HttpClient or HttpHandler, not both.");
@@ -88,10 +88,33 @@ internal sealed class RegisteredClient<TContract> : IDisposable where TContract 
         catch { _channel.Dispose(); throw; }
     }
 
-    private readonly IDisposable? _original;
+    private readonly object? _original;
+    private int _disposed;
+    internal static void DisposeOwned(object? original)
+    {
+        if (original is IDisposable disposable) disposable.Dispose();
+        else if (original is IAsyncDisposable asyncDisposable)
+            // Registration factories and synchronous container disposal cannot await.
+            // Run outside a caller's synchronization context to avoid deadlock.
+            Task.Run(async () => await asyncDisposable.DisposeAsync().ConfigureAwait(false)).GetAwaiter().GetResult();
+    }
+
     public void Dispose()
     {
-        _channel?.Dispose();
-        _original?.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        try { _channel?.Dispose(); }
+        finally { DisposeOwned(_original); }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        try { _channel?.Dispose(); }
+        finally
+        {
+            if (_original is IAsyncDisposable asyncDisposable)
+                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+            else if (_original is IDisposable disposable) disposable.Dispose();
+        }
     }
 }

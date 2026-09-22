@@ -16,7 +16,7 @@ English | [Русский](IMPLEMENTATION.ru.md)
 - Routing information included in deterministic hashes. See [migration and
   limitations](docs/url-routing.md).
 
-Local 2.1 validation: 67 non-HTTP/3 tests passed. This is not a cluster deployment
+Local 2.1 validation: 77 non-HTTP/3 tests passed. This is not a cluster deployment
 or a measured performance comparison.
 
 - MVC action discovery at startup through `IActionDescriptorCollectionProvider`.

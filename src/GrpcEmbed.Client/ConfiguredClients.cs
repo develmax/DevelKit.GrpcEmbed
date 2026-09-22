@@ -40,6 +40,12 @@ public static class GrpcEmbedConfiguredClientsExtensions
                     throw new InvalidOperationException($"{name}:Grpc:Address is required when REST BaseAddress contains a path.");
                 var address = configuredAddress is null ? baseAddress : new Uri(configuredAddress, UriKind.Absolute);
                 RequireSecureAddress(address);
+                // Resolve relative contract URLs exactly as the named HttpClient would,
+                // then retain the validated absolute address for subsequent requests.
+                contract.Address = contract.Address is null
+                    ? new Uri(address, "/_grpcembed/schema.json")
+                    : contract.Address.IsAbsoluteUri ? contract.Address : new Uri(baseAddress, contract.Address);
+                RequireSecureAddress(contract.Address);
                 var options = new GrpcEmbedClientOptions
                 {
                     Address = address,
