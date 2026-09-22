@@ -1,7 +1,9 @@
 # Runtime client integration
 
-The runtime client changes are implemented locally. Pilot services and Helm charts
-have not yet been migrated to this API. No packages have been published.
+Install `DevelKit.GrpcEmbed.Client`, or the `DevelKit.GrpcEmbed` bundle if this
+application also hosts gRPC controllers. Shared dependencies are included
+automatically; see [packages and installation](../README.md#packages-and-installation).
+Application registrations and deployment configuration must be migrated explicitly.
 
 ## Register once
 

@@ -32,6 +32,40 @@ app.MapGrpcEmbed();
 
 An ordinary `UsersController.Get(int id)` remains available as `GET /api/users/42` and is additionally exposed as `/GrpcEmbed.Users/Get`.
 
+## Packages and installation
+
+All package IDs start with `DevelKit.GrpcEmbed`. Choose the package for your
+application's role; you do not need to install all five separately.
+
+| Package | Responsibility | When to reference it directly |
+|---|---|---|
+| `DevelKit.GrpcEmbed` | Convenience bundle of the server and client integrations below. | An application both exposes controllers and calls other services, or you want the complete integration. |
+| `DevelKit.GrpcEmbed.AspNetCore` | MVC action discovery, gRPC hosting, controller invocation, schema endpoints and server-side contract checks. | An ASP.NET Core application exposes its controllers over gRPC. |
+| `DevelKit.GrpcEmbed.Client` | Runtime interface proxies, existing-client decoration, reusable channels, routing and client-side contract checks. | An application calls services over gRPC; it does not need to host MVC endpoints. |
+| `DevelKit.GrpcEmbed.Abstractions` | Shared public attributes, contracts and configuration types. | A shared DTO/contract assembly needs attributes such as `GrpcFieldNumber` without depending on server or client runtime integration. |
+| `DevelKit.GrpcEmbed.Core` | Shared runtime Protobuf model and contract-shape infrastructure. | Advanced integrations using the low-level API. Normally this is a transitive dependency, not the application entry point. |
+
+Choose **one** of these application-level installation commands:
+
+```shell
+# Server and client
+dotnet add package DevelKit.GrpcEmbed --version 2.1.0
+# Server only
+dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 2.1.0
+# Client only
+dotnet add package DevelKit.GrpcEmbed.Client --version 2.1.0
+```
+
+The bundle pulls in `AspNetCore` and `Client`; both pull in `Core` and
+`Abstractions`. NuGet resolves these dependencies automatically. Keep explicit
+GrpcEmbed package references on the same version. All five packages target
+.NET 6, 7, 8, 9 and 10; target-framework support does not extend the runtime's
+vendor support lifecycle. The version above must be available in your configured
+NuGet feed before restoring; a source release does not imply publication.
+
+Installing a package does not enable gRPC by itself: register/configure the
+server or client as shown below and in the [runtime client guide](docs/runtime-clients.md).
+
 ## Choosing which actions to expose
 
 By default, `AddGrpcEmbed()` uses `GrpcEmbedExportMode.All`: it discovers MVC actions and exports compatible ones. This does not replace their REST routes.
@@ -77,9 +111,10 @@ public Task<UserDto> Get(int id, CancellationToken cancellationToken) => LoadUse
 
 ## Client
 
-The current source version is **2.0.0**. Before upgrading from
+The current source version is **2.1.0**. Before upgrading from
 1.0.0, read the [migration guide](docs/migration-2.0.md) and
 [changelog](CHANGELOG.md). Source version does not imply NuGet publication.
+For upgrades from 2.0, also read the [2.1 routing migration notes](docs/url-routing.md).
 See [runtime client integration](docs/runtime-clients.md) and
 [configurable contract safety](docs/contract-safety.md) for the new opt-in APIs.
 
