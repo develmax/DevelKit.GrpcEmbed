@@ -147,6 +147,19 @@ public sealed class InteroperabilityTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task Disabled_grpc_server_keeps_rest_and_removes_grpc_and_schema_endpoints()
+    {
+        using var isolated = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.PostConfigure<GrpcEmbedOptions>(options => options.ServerEnabled = false)));
+        using var http = isolated.CreateClient();
+        Assert.True((await http.GetAsync("/api/users/45")).IsSuccessStatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await http.GetAsync("/_grpcembed")).StatusCode);
+        var routes = isolated.Services.GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>().Select(endpoint => endpoint.RoutePattern.RawText).ToArray();
+        Assert.DoesNotContain(routes, route => route?.Contains("GrpcEmbed.", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
     public async Task Strict_mode_rejects_an_unsupported_multipart_action_with_diagnostics()
     {
         using var strict = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>

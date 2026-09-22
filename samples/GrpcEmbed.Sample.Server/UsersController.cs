@@ -10,6 +10,7 @@ namespace GrpcEmbed.Sample.Server;
 public sealed class UsersController : ControllerBase
 {
     public static int InvocationCount;
+    public static int CreateInvocationCount;
     public static int FilterCount;
     public static int AuthorizationFilterCount;
     public static int ResourceFilterBeforeCount;
@@ -25,7 +26,11 @@ public sealed class UsersController : ControllerBase
     }
 
     [HttpPost]
-    public Task<UserDto> Create(CreateUserRequest request) => Task.FromResult(new UserDto { Id = 43, Name = request.Name });
+    public Task<UserDto> Create(CreateUserRequest request)
+    {
+        Interlocked.Increment(ref CreateInvocationCount);
+        return Task.FromResult(new UserDto { Id = 43, Name = request.Name });
+    }
 
     [HttpGet("count/{id:int}")]
     public Task<int> Count(int id) => Task.FromResult(id + 1);

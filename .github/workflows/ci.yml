@@ -42,7 +42,7 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet restore GrpcEmbed.sln
       - run: dotnet build GrpcEmbed.sln -c Release --no-restore -m:1 /nodeReuse:false
-      - name: Pack 1.0.0
+      - name: Pack packages
         shell: pwsh
         run: |
           $projects = @(
@@ -58,6 +58,6 @@ jobs:
           }
       - uses: actions/upload-artifact@v4
         with:
-          name: DevelKit.GrpcEmbed-1.0.0
+          name: DevelKit.GrpcEmbed-packages
           path: artifacts/packages/*.*nupkg
           if-no-files-found: error

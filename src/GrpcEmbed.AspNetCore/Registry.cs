@@ -17,6 +17,7 @@ internal sealed class RuntimeRegistry
     private IReadOnlyList<RuntimeMethod>? _methods;
     private SchemaManifest? _manifest;
     private GrpcEmbedSchema? _schema;
+    private string? _manifestJson;
     public RuntimeRegistry(ILogger<RuntimeRegistry> logger) => _logger = logger;
     public IReadOnlyList<RuntimeMethod> Get(IServiceProvider services)
     {
@@ -25,10 +26,10 @@ internal sealed class RuntimeRegistry
         {
             if (_methods is not null) return _methods;
             _methods = Discover(services, _logger);
-            _manifest = SchemaManifestManager.Create(_methods);
             var options = services.GetRequiredService<IOptions<GrpcEmbedOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(options.SchemaManifestPath) && File.Exists(options.SchemaManifestPath))
             {
+                _manifest = SchemaManifestManager.Create(_methods, options.Contract.Hash.Enabled);
                 var errors = SchemaManifestManager.ValidateFile(options.SchemaManifestPath, _manifest);
                 foreach (var error in errors) _logger.LogWarning("GrpcEmbed schema compatibility: {Error}", error);
                 if (errors.Count > 0 && options.ThrowOnUnsupportedAction) throw new InvalidOperationException("GrpcEmbed schema compatibility validation failed: " + string.Join(" ", errors));
@@ -40,9 +41,24 @@ internal sealed class RuntimeRegistry
     public GrpcEmbedSchema GetSchema(IServiceProvider services)
     {
         Get(services);
-        return _schema ??= SchemaGenerator.Generate(_methods!);
+        lock (_gate)
+            return _schema ??= SchemaGenerator.Generate(_methods!,
+                services.GetRequiredService<IOptions<GrpcEmbedOptions>>().Value.Contract.Hash.Enabled);
     }
-    public string GetManifest(IServiceProvider services) { Get(services); return SchemaManifestManager.Serialize(_manifest!); }
+    public string GetManifest(IServiceProvider services)
+    {
+        Get(services);
+        lock (_gate)
+        {
+            if (_manifestJson is not null) return _manifestJson;
+            var options = services.GetRequiredService<IOptions<GrpcEmbedOptions>>().Value;
+            _manifest ??= SchemaManifestManager.Create(_methods!, options.Contract.Hash.Enabled);
+            return _manifestJson = SchemaManifestManager.Serialize(_manifest with
+            {
+                SchemaHash = options.Contract.Hash.Enabled ? GetSchema(services).Sha256 : null,
+            });
+        }
+    }
 
     private static IReadOnlyList<RuntimeMethod> Discover(IServiceProvider services, ILogger logger)
     {

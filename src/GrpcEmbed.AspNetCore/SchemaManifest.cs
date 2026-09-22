@@ -2,18 +2,18 @@ using System.Text.Json;
 
 namespace GrpcEmbed.AspNetCore;
 
-internal sealed record SchemaManifest(IReadOnlyDictionary<string, SchemaManifestType> Types, IReadOnlyDictionary<string, SchemaManifestService>? Services = null);
+internal sealed record SchemaManifest(IReadOnlyDictionary<string, SchemaManifestType> Types, IReadOnlyDictionary<string, SchemaManifestService>? Services = null, string? SchemaHash = null);
 internal sealed record SchemaManifestType(IReadOnlyDictionary<string, SchemaManifestField> Fields, IReadOnlyList<int>? Reserved = null);
 internal sealed record SchemaManifestField(int Number, string ClrType);
 internal sealed record SchemaManifestService(IReadOnlyDictionary<string, SchemaManifestMethod> Methods);
-internal sealed record SchemaManifestMethod(string RequestType, string ResponseType, IReadOnlyList<SchemaManifestParameter>? Parameters = null);
+internal sealed record SchemaManifestMethod(string RequestType, string ResponseType, IReadOnlyList<SchemaManifestParameter>? Parameters = null, string? RequestShapeHash = null, string? ResponseShapeHash = null);
 internal sealed record SchemaManifestParameter(string Name, string ClrType, string? BindingSource, int FieldNumber);
 
 internal static class SchemaManifestManager
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    public static SchemaManifest Create(IReadOnlyList<RuntimeMethod> methods)
+    public static SchemaManifest Create(IReadOnlyList<RuntimeMethod> methods, bool computeHash = true)
     {
         var roots = methods.SelectMany(x => new[] { x.RequestType, x.ResponseType });
         var types = new Dictionary<string, SchemaManifestType>(StringComparer.Ordinal);
@@ -27,7 +27,9 @@ internal static class SchemaManifestManager
                         parameter.Name!, FriendlyType(parameter.ParameterType),
                         method.Action.Parameters.OfType<Microsoft.AspNetCore.Mvc.Controllers.ControllerParameterDescriptor>()
                             .FirstOrDefault(x => x.ParameterInfo == parameter)?.BindingInfo?.BindingSource?.Id,
-                        GrpcEmbedFieldNumbers.Assign(method.Parameters)[parameter.Name!])).ToArray()),
+                        GrpcEmbedFieldNumbers.Assign(method.Parameters)[parameter.Name!])).ToArray(),
+                    computeHash ? GrpcEmbedContractShape.Hash(method.RequestType) : null,
+                    computeHash ? GrpcEmbedContractShape.Hash(method.ResponseType) : null),
                 StringComparer.Ordinal)),
             StringComparer.Ordinal);
         return new SchemaManifest(types, services);

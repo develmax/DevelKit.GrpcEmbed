@@ -13,7 +13,7 @@ internal sealed record GrpcEmbedSchema(string Proto, string Sha256, byte[] Descr
 
 internal static class SchemaGenerator
 {
-    public static GrpcEmbedSchema Generate(IReadOnlyList<RuntimeMethod> methods)
+    public static GrpcEmbedSchema Generate(IReadOnlyList<RuntimeMethod> methods, bool computeHash = true)
     {
         var messages = new Dictionary<Type, string>();
         foreach (var method in methods)
@@ -41,7 +41,9 @@ internal static class SchemaGenerator
         if (usesTimestamp) { descriptor.Dependency.Add("google/protobuf/timestamp.proto"); set.File.Add(TimestampMessage.Descriptor.File.ToProto()); }
         if (usesDuration) { descriptor.Dependency.Add("google/protobuf/duration.proto"); set.File.Add(DurationMessage.Descriptor.File.ToProto()); }
         set.File.Add(descriptor);
-        return new GrpcEmbedSchema(proto, Convert.ToHexString(SHA256.HashData(set.ToByteArray())).ToLowerInvariant(), set.ToByteArray(), set.File.Select(x => x.ToByteArray()).ToArray(), methods.Select(x => "GrpcEmbed." + x.ServiceName).Distinct().OrderBy(x => x).ToArray());
+        var hash = computeHash ? Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes("grpcembed-contract-v1\n" + proto))).ToLowerInvariant() : string.Empty;
+        return new GrpcEmbedSchema(proto, hash, set.ToByteArray(), set.File.Select(x => x.ToByteArray()).ToArray(), methods.Select(x => "GrpcEmbed." + x.ServiceName).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray());
     }
 
     private static void AddMessage(Type type, IDictionary<Type, string> messages)
