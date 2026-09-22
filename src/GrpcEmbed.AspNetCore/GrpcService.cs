@@ -28,10 +28,12 @@ internal sealed class GrpcEmbedService
         where TRequest : class where TResponse : class
     {
         var http = call.GetHttpContext();
+        http.GetEndpoint()?.Metadata.GetMetadata<GrpcEmbedRouteMetadata>()?.Validate(http, request);
         // Queue metadata without starting the response. MVC actions, filters, and OnStarting
         // callbacks must still be able to add headers before Grpc.AspNetCore writes the result.
-        http.Response.Headers["grpcembed-schema-hash"] = _registry.GetSchema(_services).Sha256;
-        var actionContext = new ActionContext(http, new Microsoft.AspNetCore.Routing.RouteData(), method.Action);
+        if (_options.Contract.Enabled && _options.Contract.Hash.Enabled && _options.Contract.Hash.SendInResponses)
+            http.Response.Headers[GrpcEmbedContractHeaders.ServerHash] = _registry.GetSchema(_services).Sha256;
+        var actionContext = new ActionContext(http, new Microsoft.AspNetCore.Routing.RouteData(http.Request.RouteValues), method.Action);
         var controllerContext = new ControllerContext(actionContext);
         var controller = _controllers.CreateController(controllerContext);
         try
@@ -72,6 +74,12 @@ internal sealed class GrpcEmbedService
                 raw = exceptionContext.Result;
             }
             raw = UnwrapActionResult(raw, _options);
+            if (typeof(TResponse) == typeof(GrpcEmbedEmpty))
+            {
+                if (raw is not null)
+                    throw new RpcException(new Status(StatusCode.Unimplemented, "An untyped MVC action returned a body; declare its response type explicitly."));
+                return (TResponse)(object)new GrpcEmbedEmpty();
+            }
             if (raw is null) throw new RpcException(new Status(StatusCode.NotFound, "The MVC action returned no value."));
             if (method.WrapResponse is not null) return (TResponse)method.WrapResponse(raw);
             return (TResponse)raw;
@@ -130,7 +138,7 @@ internal sealed class GrpcEmbedService
             if (index == filters.Length)
             {
                 for (var i = 0; i < arguments.Length; i++) arguments[i] = dictionary[method.Action.MethodInfo.GetParameters()[i].Name!];
-                var value = await AwaitResult(method.Invoke(controller, arguments));
+                var value = await AwaitResult(method.Invoke(controller, arguments), method.Action.MethodInfo.ReturnType);
                 return new ActionExecutedContext(actionContext, filters.ToList(), controller) { Result = value as IActionResult ?? new ObjectResult(value) };
             }
             if (filters[index] is IAsyncActionFilter asyncFilter)
@@ -170,9 +178,9 @@ internal sealed class GrpcEmbedService
         return (await ResultNext(0)).Result;
     }
 
-    private static async Task<object?> AwaitResult(object? pending)
+    private static async Task<object?> AwaitResult(object? pending, Type declaredReturnType)
     {
-        if (pending is Task task) { await task.ConfigureAwait(false); return task.GetType().IsGenericType ? task.GetType().GetProperty("Result")!.GetValue(task) : null; }
+        if (pending is Task task) { await task.ConfigureAwait(false); return declaredReturnType == typeof(Task) ? null : task.GetType().GetProperty("Result")!.GetValue(task); }
         if (pending is ValueTask valueTask) { await valueTask.ConfigureAwait(false); return null; }
         if (pending is not null && pending.GetType().IsValueType && pending.GetType().IsGenericType && pending.GetType().GetGenericTypeDefinition() == typeof(ValueTask<>))
         {

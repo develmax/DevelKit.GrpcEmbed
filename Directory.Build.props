@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>1.0.0</Version>
+    <Version>2.1.0</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Initial stable release: runtime MVC discovery, native unary gRPC, Protocol Buffers, contract clients, schema export, reflection, authorization, validation, and .NET 6-10 support.</PackageReleaseNotes>
+    <PackageReleaseNotes>REST-compatible gRPC URLs, reusable channels, route/Protobuf consistency checks and opt-in anonymous contracts. Configured clients default to Rest routing; choose Native to preserve 2.0 addresses. See docs/url-routing.md for migration and rollout requirements.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

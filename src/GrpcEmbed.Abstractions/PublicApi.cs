@@ -5,6 +5,8 @@ using System.Text;
 namespace GrpcEmbed;
 
 public enum GrpcEmbedExportMode { All, ExplicitOnly }
+/// <summary>Wire response for an operation that completes without a response body.</summary>
+public sealed class GrpcEmbedEmpty { }
 public enum GrpcEmbedMethodType { Unary, ServerStreaming, ClientStreaming, DuplexStreaming }
 public enum GrpcEmbedTransportMode { GrpcOnly }
 public enum GrpcEmbedStatusCode { Cancelled, InvalidArgument, DeadlineExceeded, NotFound, AlreadyExists, PermissionDenied, ResourceExhausted, FailedPrecondition, Unauthenticated, Unavailable, Internal }
@@ -57,6 +59,9 @@ public sealed record GrpcEmbedActionContext(
 
 public sealed class GrpcEmbedOptions
 {
+    public GrpcEmbedRoutingOptions Routing { get; set; } = new();
+    public GrpcEmbedServerContractOptions Contract { get; set; } = new();
+    public bool ServerEnabled { get; set; } = true;
     public GrpcEmbedExportMode ExportMode { get; set; } = GrpcEmbedExportMode.All;
     public bool ThrowOnUnsupportedAction { get; set; }
     public bool EnableSchemaEndpoint { get; set; }
@@ -66,6 +71,43 @@ public sealed class GrpcEmbedOptions
     public Func<int, GrpcEmbedStatusCode>? StatusMapper { get; set; }
     public string? SchemaManifestPath { get; set; }
     public Func<GrpcEmbedActionContext, bool>? ShouldExport { get; set; }
+}
+
+public enum GrpcEmbedContractValidation { Disabled, IfPresent, Required }
+
+public enum GrpcEmbedRoutingMode { Native, Rest, Method, ControllerMethod }
+
+public sealed class GrpcEmbedRoutingOptions
+{
+    public GrpcEmbedRoutingMode Mode { get; set; } = GrpcEmbedRoutingMode.Native;
+    public string Prefix { get; set; } = "grpc";
+}
+public enum GrpcEmbedContractGeneration { Startup, FirstRequest }
+
+public sealed class GrpcEmbedContractHashOptions
+{
+    public bool Enabled { get; set; } = true;
+    public bool SendInResponses { get; set; } = true;
+}
+
+public sealed class GrpcEmbedServerContractOptions
+{
+    /// <summary>Allows anonymous schema downloads even when the host has a fallback authorization policy.</summary>
+    public bool AllowAnonymous { get; set; }
+    public bool Enabled { get; set; } = true;
+    public bool ExposeEndpoint { get; set; }
+    public GrpcEmbedContractGeneration Generate { get; set; } = GrpcEmbedContractGeneration.FirstRequest;
+    public GrpcEmbedContractValidation Validation { get; set; } = GrpcEmbedContractValidation.Disabled;
+    public GrpcEmbedContractHashOptions Hash { get; set; } = new();
+}
+
+public static class GrpcEmbedContractHeaders
+{
+    public const string Operation = "grpcembed-operation";
+    public const string RequestHash = "grpcembed-contract-hash";
+    public const string ServerHash = "grpcembed-schema-hash";
+    public const string Rejection = "grpcembed-contract-rejection";
+    public const string NotExecuted = "not-executed";
 }
 
 /// <summary>Deterministic protobuf field numbering shared by server, schema tooling and clients.</summary>
@@ -78,7 +120,7 @@ public static class GrpcEmbedFieldNumbers
         foreach (var name in memberNames.OrderBy(x => x, StringComparer.Ordinal))
         {
             var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(name));
-            var number = (int)(BitConverter.ToUInt32(bytes, 0) % 536_870_911) + 1;
+            var number = (int)(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes) % 536_870_911) + 1;
             if (number is >= 19_000 and <= 19_999) number += 1_000;
             while (!used.Add(number)) number = number == 536_870_911 ? 1 : number + 1;
             result.Add(name, number);

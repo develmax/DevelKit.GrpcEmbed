@@ -10,6 +10,10 @@ HTTP/2 by default, with opt-in HTTP/3 support. See [transport support](#transpor
 
 NuGet package: `DevelKit.GrpcEmbed`.
 
+Version 2.1 adds [REST-compatible gRPC URLs](docs/url-routing.md): keep the same
+application path and HTTPS port for REST and gRPC, with configurable addressing
+and anonymous contract downloads. Native gRPC addressing remains available.
+
 [![CI](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/ci.yml/badge.svg)](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/DevelKit.GrpcEmbed.svg)](https://www.nuget.org/packages/DevelKit.GrpcEmbed)
 [![License](https://img.shields.io/github/license/develmax/DevelKit.GrpcEmbed)](LICENSE)
@@ -28,7 +32,56 @@ app.MapGrpcEmbed();
 
 An ordinary `UsersController.Get(int id)` remains available as `GET /api/users/42` and is additionally exposed as `/GrpcEmbed.Users/Get`.
 
+## Choosing which actions to expose
+
+By default, `AddGrpcEmbed()` uses `GrpcEmbedExportMode.All`: it discovers MVC actions and exports compatible ones. This does not replace their REST routes.
+
+To export all compatible actions and fail startup instead of silently skipping unsupported actions:
+
+```csharp
+using GrpcEmbed;
+
+builder.Services.AddGrpcEmbed(options =>
+{
+    options.ExportMode = GrpcEmbedExportMode.All;
+    options.ThrowOnUnsupportedAction = true;
+});
+```
+
+Use `[GrpcIgnore]` on a controller or action to keep it REST-only:
+
+```csharp
+[HttpPost("upload")]
+[GrpcIgnore]
+public IActionResult Upload(IFormFile file) => Ok();
+```
+
+Alternatively, opt in explicitly:
+
+```csharp
+builder.Services.AddGrpcEmbed(options =>
+{
+    options.ExportMode = GrpcEmbedExportMode.ExplicitOnly;
+    options.ThrowOnUnsupportedAction = true;
+});
+
+// Add to an existing MVC action, alongside its usual routing attributes:
+[GrpcExport]
+[HttpGet("{id:int}")]
+public Task<UserDto> Get(int id, CancellationToken cancellationToken) => LoadUser(id, cancellationToken);
+```
+
+`[GrpcExport]` on a controller opts in all its compatible MVC actions. `[GrpcIgnore]` always wins, including when the controller has `[GrpcExport]`; attributes are inherited. These attributes do not disable REST or override authorization. A configured `ShouldExport` predicate is an additional filter: attributes cannot re-enable an action it excludes. Remove a method-name allowlist if you want all actions of the selected controllers.
+
+`ThrowOnUnsupportedAction` controls diagnostics, not compatibility: it does not make file uploads, raw streams, or other unsupported contracts serializable. With `false` (the default), detected unsupported actions are logged and skipped; with `true`, startup fails. Explicitly ignored actions are not exported or validated for gRPC. Keep strict mode in tests to detect unexpected omissions. Successful route/schema construction is not a substitute for testing each action's business behavior.
+
 ## Client
+
+The current source version is **2.0.0**. Before upgrading from
+1.0.0, read the [migration guide](docs/migration-2.0.md) and
+[changelog](CHANGELOG.md). Source version does not imply NuGet publication.
+See [runtime client integration](docs/runtime-clients.md) and
+[configurable contract safety](docs/contract-safety.md) for the new opt-in APIs.
 
 ```csharp
 services.AddGrpcEmbedClient<IUsersApi>(options =>

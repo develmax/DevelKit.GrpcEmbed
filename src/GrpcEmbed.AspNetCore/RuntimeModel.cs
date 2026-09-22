@@ -27,7 +27,10 @@ internal static class ActionDelegates
         var arguments = Expression.Parameter(typeof(object[]));
         var callArguments = method.GetParameters().Select((p, i) => Expression.Convert(Expression.ArrayIndex(arguments, Expression.Constant(i)), p.ParameterType));
         var call = Expression.Call(Expression.Convert(target, method.DeclaringType!), method, callArguments);
-        return Expression.Lambda<Func<object, object?[], object?>>(Expression.Convert(call, typeof(object)), target, arguments).Compile();
+        Expression result = method.ReturnType == typeof(void)
+            ? Expression.Block(call, Expression.Constant(null, typeof(object)))
+            : Expression.Convert(call, typeof(object));
+        return Expression.Lambda<Func<object, object?[], object?>>(result, target, arguments).Compile();
     }
 
     public static Func<object, object?> CompileGetter(Type declaringType, string propertyName)
@@ -119,9 +122,10 @@ internal static class ReturnTypes
 {
     public static Type? Unwrap(Type type)
     {
-        if (type == typeof(void) || type == typeof(Task) || type == typeof(ValueTask)) return null;
+        if (type == typeof(void) || type == typeof(Task) || type == typeof(ValueTask)) return typeof(GrpcEmbedEmpty);
         if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Task<>) || type.GetGenericTypeDefinition() == typeof(ValueTask<>))) type = type.GetGenericArguments()[0];
         if (type.IsGenericType && type.GetGenericTypeDefinition().FullName == "Microsoft.AspNetCore.Mvc.ActionResult`1") type = type.GetGenericArguments()[0];
+        if (type == typeof(Microsoft.AspNetCore.Mvc.IActionResult)) return typeof(GrpcEmbedEmpty);
         return type;
     }
 }
