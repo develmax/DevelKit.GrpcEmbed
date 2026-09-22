@@ -13,7 +13,7 @@ internal sealed record GrpcEmbedSchema(string Proto, string Sha256, byte[] Descr
 
 internal static class SchemaGenerator
 {
-    public static GrpcEmbedSchema Generate(IReadOnlyList<RuntimeMethod> methods, bool computeHash = true)
+    public static GrpcEmbedSchema Generate(IReadOnlyList<RuntimeMethod> methods, bool computeHash = true, GrpcEmbedRoutingOptions? routing = null)
     {
         var messages = new Dictionary<Type, string>();
         foreach (var method in methods)
@@ -41,8 +41,13 @@ internal static class SchemaGenerator
         if (usesTimestamp) { descriptor.Dependency.Add("google/protobuf/timestamp.proto"); set.File.Add(TimestampMessage.Descriptor.File.ToProto()); }
         if (usesDuration) { descriptor.Dependency.Add("google/protobuf/duration.proto"); set.File.Add(DurationMessage.Descriptor.File.ToProto()); }
         set.File.Add(descriptor);
+        var routes = System.Text.Json.JsonSerializer.Serialize(methods
+            .OrderBy(method => method.ServiceName, StringComparer.Ordinal)
+            .ThenBy(method => method.MethodName, StringComparer.Ordinal)
+            .Select(SchemaManifestManager.GetRoute));
         var hash = computeHash ? Convert.ToHexString(SHA256.HashData(
-            Encoding.UTF8.GetBytes("grpcembed-contract-v1\n" + proto))).ToLowerInvariant() : string.Empty;
+            Encoding.UTF8.GetBytes("grpcembed-contract-v2\n" + proto + "\n" + routes + "\n" +
+                (routing?.Mode ?? GrpcEmbedRoutingMode.Native) + "\n" + (routing?.Prefix ?? "grpc")))).ToLowerInvariant() : string.Empty;
         return new GrpcEmbedSchema(proto, hash, set.ToByteArray(), set.File.Select(x => x.ToByteArray()).ToArray(), methods.Select(x => "GrpcEmbed." + x.ServiceName).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray());
     }
 

@@ -4,6 +4,21 @@ English | [Русский](IMPLEMENTATION.ru.md)
 
 ## Implemented
 
+### 2.1 URL routing
+
+- Configurable Rest, Method, ControllerMethod and Native addressing.
+- REST-compatible gRPC paths selected by content type and operation metadata.
+- Route/Protobuf consistency checks before controller creation; contract validation
+  remains before deserialization.
+- Stable channels/method descriptors with per-request URI rewriting, without an
+  unbounded per-URL method cache.
+- Optional anonymous schema downloads, independently of business authorization.
+- Routing information included in deterministic hashes. See [migration and
+  limitations](docs/url-routing.md).
+
+Local 2.1 validation: 67 non-HTTP/3 tests passed. This is not a cluster deployment
+or a measured performance comparison.
+
 - MVC action discovery at startup through `IActionDescriptorCollectionProvider`.
 - Export modes for all compatible actions or explicitly marked actions only.
 - Support for `GrpcExport`, `GrpcIgnore`, `GrpcName`, and custom export predicates.

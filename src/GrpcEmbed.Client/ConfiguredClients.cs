@@ -20,6 +20,10 @@ public static class GrpcEmbedConfiguredClientsExtensions
             if (!enabled) return null;
             var serviceName = section["Grpc:ServiceName"];
             var contract = new GrpcEmbedClientContractOptions();
+            var routing = new GrpcEmbedClientRoutingOptions { Mode = GrpcEmbedRoutingMode.Rest };
+            configuration.GetSection("GrpcEmbed:Clients:Routing").Bind(routing);
+            section.GetSection("Grpc:Routing").Bind(routing);
+            if (routing.Mode != GrpcEmbedRoutingMode.Native) contract.Fetch = GrpcEmbedContractFetch.FirstCall;
             configuration.GetSection("GrpcEmbed:Clients:Contract").Bind(contract);
             section.GetSection("Grpc:Contract").Bind(contract);
             if (string.IsNullOrWhiteSpace(serviceName) && contract.Fetch == GrpcEmbedContractFetch.Never)
@@ -32,7 +36,7 @@ public static class GrpcEmbedConfiguredClientsExtensions
                 var baseAddress = http.BaseAddress ??
                     throw new InvalidOperationException($"{name} has no HTTP BaseAddress.");
                 var configuredAddress = section["Grpc:Address"];
-                if (configuredAddress is null && baseAddress.AbsolutePath != "/")
+                if (routing.Mode == GrpcEmbedRoutingMode.Native && configuredAddress is null && baseAddress.AbsolutePath != "/")
                     throw new InvalidOperationException($"{name}:Grpc:Address is required when REST BaseAddress contains a path.");
                 var address = configuredAddress is null ? baseAddress : new Uri(configuredAddress, UriKind.Absolute);
                 RequireSecureAddress(address);
@@ -43,6 +47,7 @@ public static class GrpcEmbedConfiguredClientsExtensions
                     DisposeHttpClient = true,
                     ServiceName = serviceName,
                     Contract = contract,
+                    Routing = routing,
                     DefaultTimeout = http.Timeout == Timeout.InfiniteTimeSpan ? null : http.Timeout,
                 };
                 return options;

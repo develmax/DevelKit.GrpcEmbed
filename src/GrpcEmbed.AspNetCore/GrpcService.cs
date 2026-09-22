@@ -28,11 +28,12 @@ internal sealed class GrpcEmbedService
         where TRequest : class where TResponse : class
     {
         var http = call.GetHttpContext();
+        http.GetEndpoint()?.Metadata.GetMetadata<GrpcEmbedRouteMetadata>()?.Validate(http, request);
         // Queue metadata without starting the response. MVC actions, filters, and OnStarting
         // callbacks must still be able to add headers before Grpc.AspNetCore writes the result.
         if (_options.Contract.Enabled && _options.Contract.Hash.Enabled && _options.Contract.Hash.SendInResponses)
             http.Response.Headers[GrpcEmbedContractHeaders.ServerHash] = _registry.GetSchema(_services).Sha256;
-        var actionContext = new ActionContext(http, new Microsoft.AspNetCore.Routing.RouteData(), method.Action);
+        var actionContext = new ActionContext(http, new Microsoft.AspNetCore.Routing.RouteData(http.Request.RouteValues), method.Action);
         var controllerContext = new ControllerContext(actionContext);
         var controller = _controllers.CreateController(controllerContext);
         try

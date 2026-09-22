@@ -11,6 +11,7 @@ namespace GrpcEmbed.Client;
 
 public sealed class GrpcEmbedClientOptions
 {
+    public GrpcEmbedClientRoutingOptions Routing { get; set; } = new();
     public GrpcEmbedClientContractOptions Contract { get; set; } = new();
     public Uri Address { get; set; } = null!;
     public TimeSpan? DefaultTimeout { get; set; }
@@ -73,12 +74,7 @@ public static class GrpcEmbedClientExtensions
         {
             var options = provider.GetRequiredService<GrpcEmbedClientSettings<TContract>>().Options;
             return new GrpcEmbedChannel<TContract>(
-            GrpcChannel.ForAddress(options.Address, new GrpcChannelOptions
-            {
-                HttpHandler = options.HttpHandler,
-                HttpClient = options.HttpClient,
-                DisposeHttpClient = options.DisposeHttpClient,
-            }));
+            GrpcEmbedChannelFactory.Create(options));
         });
         services.AddSingleton<TContract>(sp => GrpcEmbedProxy<TContract>.Create(
             sp.GetRequiredService<GrpcEmbedChannel<TContract>>().Channel.CreateCallInvoker(),
@@ -242,6 +238,19 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
         var activeMethod = prepared is not null && prepared.Service != method.ServiceName
             ? ResolvedContractMethods<TRequest, TWireResponse>.Get(method, prepared.Service) : method;
         var metadata = _options.MetadataFactory?.Invoke();
+        if (_options.Routing.Mode != GrpcEmbedRoutingMode.Native)
+        {
+            if (prepared is null) throw new InvalidOperationException("URL routing requires a fetched contract.");
+            var operation = activeMethod.ServiceName + "/" + activeMethod.Name;
+            var path = ClientRoute.Build(_options, prepared.Route, activeMethod.ServiceName, activeMethod.Name, parameters, args);
+            var routed = new Metadata();
+            if (metadata is not null)
+                foreach (var item in metadata)
+                    if (item.Key != GrpcEmbedContractHeaders.Operation && item.Key != GrpcEmbedChannelFactory.PathHeader) routed.Add(item);
+            routed.Add(GrpcEmbedContractHeaders.Operation, operation);
+            routed.Add(GrpcEmbedChannelFactory.PathHeader, path);
+            metadata = routed;
+        }
         if (_options.Contract.SendHash)
         {
             var guarded = new Metadata();

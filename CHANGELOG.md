@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 2.1.0
+
+- Added REST-compatible gRPC URLs, configurable Method/ControllerMethod/Native
+  addressing, and operation metadata for actions sharing a REST route.
+- Added route/Protobuf argument consistency checks before controller execution.
+- Preserved reusable channels without per-URL gRPC method-cache growth.
+- Added explicit anonymous schema downloads without weakening business authorization.
+- Included routing information in deterministic contract hashes. Regenerate pinned hashes.
+- Configured clients now default to Rest routing and first-call contract fetching;
+  set Routing.Mode to Native to preserve 2.0 addressing. Direct registration keeps
+  Native defaults. See [URL routing and upgrade notes](docs/url-routing.md).
+
 ## 2.0.0 — 2026-09-22
 
 ### Added

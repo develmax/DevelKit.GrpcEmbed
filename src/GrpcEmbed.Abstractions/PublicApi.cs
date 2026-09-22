@@ -59,6 +59,7 @@ public sealed record GrpcEmbedActionContext(
 
 public sealed class GrpcEmbedOptions
 {
+    public GrpcEmbedRoutingOptions Routing { get; set; } = new();
     public GrpcEmbedServerContractOptions Contract { get; set; } = new();
     public bool ServerEnabled { get; set; } = true;
     public GrpcEmbedExportMode ExportMode { get; set; } = GrpcEmbedExportMode.All;
@@ -73,6 +74,14 @@ public sealed class GrpcEmbedOptions
 }
 
 public enum GrpcEmbedContractValidation { Disabled, IfPresent, Required }
+
+public enum GrpcEmbedRoutingMode { Native, Rest, Method, ControllerMethod }
+
+public sealed class GrpcEmbedRoutingOptions
+{
+    public GrpcEmbedRoutingMode Mode { get; set; } = GrpcEmbedRoutingMode.Native;
+    public string Prefix { get; set; } = "grpc";
+}
 public enum GrpcEmbedContractGeneration { Startup, FirstRequest }
 
 public sealed class GrpcEmbedContractHashOptions
@@ -83,6 +92,8 @@ public sealed class GrpcEmbedContractHashOptions
 
 public sealed class GrpcEmbedServerContractOptions
 {
+    /// <summary>Allows anonymous schema downloads even when the host has a fallback authorization policy.</summary>
+    public bool AllowAnonymous { get; set; }
     public bool Enabled { get; set; } = true;
     public bool ExposeEndpoint { get; set; }
     public GrpcEmbedContractGeneration Generate { get; set; } = GrpcEmbedContractGeneration.FirstRequest;
@@ -92,6 +103,7 @@ public sealed class GrpcEmbedServerContractOptions
 
 public static class GrpcEmbedContractHeaders
 {
+    public const string Operation = "grpcembed-operation";
     public const string RequestHash = "grpcembed-contract-hash";
     public const string ServerHash = "grpcembed-schema-hash";
     public const string Rejection = "grpcembed-contract-rejection";

@@ -9,6 +9,17 @@ namespace GrpcEmbed.Tests;
 
 public sealed class ContractHashTests : IClassFixture<WebApplicationFactory<Program>>
 {
+    [Fact]
+    public void Routing_mode_and_prefix_are_part_of_the_contract_hash()
+    {
+        var methods = _factory.Services.GetRequiredService<RuntimeRegistry>().Get(_factory.Services);
+        var native = SchemaGenerator.Generate(methods).Sha256;
+        var rest = SchemaGenerator.Generate(methods, true, new GrpcEmbedRoutingOptions { Mode = GrpcEmbedRoutingMode.Rest }).Sha256;
+        var first = SchemaGenerator.Generate(methods, true, new GrpcEmbedRoutingOptions { Mode = GrpcEmbedRoutingMode.Method, Prefix = "grpc" }).Sha256;
+        var second = SchemaGenerator.Generate(methods, true, new GrpcEmbedRoutingOptions { Mode = GrpcEmbedRoutingMode.Method, Prefix = "rpc" }).Sha256;
+        Assert.NotEqual(native, rest);
+        Assert.NotEqual(first, second);
+    }
     private readonly WebApplicationFactory<Program> _factory;
     public ContractHashTests(WebApplicationFactory<Program> factory) => _factory = factory;
 

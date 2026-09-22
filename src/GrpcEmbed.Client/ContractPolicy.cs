@@ -19,8 +19,8 @@ public sealed class GrpcEmbedClientContractOptions
 
 internal sealed class ClientContractState
 {
-    internal sealed record PreparedContract(string Hash, string Service);
-    private sealed record Operation(string Request, string Response);
+    internal sealed record PreparedContract(string Hash, string Service, ClientRoute? Route);
+    private sealed record Operation(string Request, string Response, ClientRoute? Route);
     private sealed record Snapshot(string Hash, Dictionary<string, Operation> Operations, DateTime Loaded);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly GrpcEmbedClientOptions _options;
@@ -29,6 +29,10 @@ internal sealed class ClientContractState
     public ClientContractState(GrpcEmbedClientOptions options)
     {
         _options = options;
+        if (!Enum.IsDefined(typeof(GrpcEmbedRoutingMode), options.Routing.Mode))
+            throw new InvalidOperationException("Unknown client routing mode.");
+        if (options.Routing.Mode != GrpcEmbedRoutingMode.Native && options.Contract.Fetch == GrpcEmbedContractFetch.Never)
+            throw new InvalidOperationException("URL routing requires contract fetching.");
         var policy = options.Contract;
         if (!Enum.IsDefined(typeof(GrpcEmbedContractFetch), policy.Fetch) ||
             !Enum.IsDefined(typeof(GrpcEmbedContractMismatch), policy.OnMismatch))
@@ -66,7 +70,7 @@ internal sealed class ClientContractState
         if (operation.Request != requestShape || operation.Response != responseShape)
             throw new RpcException(new Status(StatusCode.FailedPrecondition,
                 $"Local models do not match the contract for {key}; the operation was not sent."));
-        return new PreparedContract(snapshot.Hash, service);
+        return new PreparedContract(snapshot.Hash, service, operation.Route);
     }
 
     public async Task PreloadAsync(CancellationToken token) => _ = await LoadAsync(false, null, token).ConfigureAwait(false);
@@ -84,7 +88,11 @@ internal sealed class ClientContractState
         {
             if (Fresh(_snapshot)) return _snapshot!;
             var address = _options.Contract.Address ?? new Uri(_options.Address, "/_grpcembed/schema.json");
-            using var request = new HttpRequestMessage(HttpMethod.Get, address);
+            using var request = new HttpRequestMessage(HttpMethod.Get, address)
+            {
+                Version = _options.HttpClient!.DefaultRequestVersion,
+                VersionPolicy = _options.HttpClient.DefaultVersionPolicy,
+            };
             if (_snapshot is { } existing) request.Headers.TryAddWithoutValidation("If-None-Match", "\"" + existing.Hash + "\"");
             // Per-call metadata is never stored in the shared contract snapshot.
             foreach (var entry in _options.MetadataFactory?.Invoke() ?? new Metadata())
@@ -95,6 +103,14 @@ internal sealed class ClientContractState
                 return _snapshot = old with { Loaded = DateTime.UtcNow };
             response.EnsureSuccessStatusCode();
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token).ConfigureAwait(false));
+            if (_options.Routing.Mode != GrpcEmbedRoutingMode.Native)
+            {
+                if (!json.RootElement.TryGetProperty("routingMode", out var mode) || mode.GetString() != _options.Routing.Mode.ToString())
+                    throw new InvalidOperationException("Client and server routing modes differ; the operation was not sent.");
+                if (_options.Routing.Mode != GrpcEmbedRoutingMode.Rest &&
+                    (!json.RootElement.TryGetProperty("routingPrefix", out var prefix) || prefix.GetString()?.Trim('/') != _options.Routing.Prefix.Trim('/')))
+                    throw new InvalidOperationException("Client and server routing prefixes differ; the operation was not sent.");
+            }
             var hash = json.RootElement.GetProperty("schemaHash").GetString();
             if (hash is null || hash.Length != 64 || hash.Any(character => !Uri.IsHexDigit(character)))
                 throw new InvalidOperationException("The server contract does not contain a valid SHA-256 hash.");
@@ -106,7 +122,8 @@ internal sealed class ClientContractState
             foreach (var method in service.Value.GetProperty("methods").EnumerateObject())
                 operations.Add("GrpcEmbed." + service.Name + "/" + method.Name, new Operation(
                     method.Value.GetProperty("requestShapeHash").GetString() ?? "",
-                    method.Value.GetProperty("responseShapeHash").GetString() ?? ""));
+                    method.Value.GetProperty("responseShapeHash").GetString() ?? "",
+                    method.Value.TryGetProperty("route", out var route) && route.ValueKind == JsonValueKind.Object ? ClientRoute.Parse(route) : null));
             return _snapshot = new Snapshot(hash, operations, DateTime.UtcNow);
         }
         finally { _gate.Release(); }

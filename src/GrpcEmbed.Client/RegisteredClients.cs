@@ -83,12 +83,7 @@ internal sealed class RegisteredClient<TContract> : IDisposable where TContract 
         if (options.TransportMode != GrpcEmbedTransportMode.GrpcOnly)
             throw new InvalidOperationException("Only gRPC transport is supported.");
         options.LocalPropertyTarget = original;
-        _channel = GrpcChannel.ForAddress(options.Address, new GrpcChannelOptions
-        {
-            HttpClient = options.HttpClient,
-            HttpHandler = options.HttpHandler,
-            DisposeHttpClient = options.DisposeHttpClient,
-        });
+        _channel = GrpcEmbedChannelFactory.Create(options);
         try { Client = GrpcEmbedProxy<TContract>.Create(_channel.CreateCallInvoker(), options); }
         catch { _channel.Dispose(); throw; }
     }

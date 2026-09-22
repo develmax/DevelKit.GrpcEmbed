@@ -10,6 +10,10 @@ HTTP/2 by default, with opt-in HTTP/3 support. See [transport support](#transpor
 
 NuGet package: `DevelKit.GrpcEmbed`.
 
+Version 2.1 adds [REST-compatible gRPC URLs](docs/url-routing.md): keep the same
+application path and HTTPS port for REST and gRPC, with configurable addressing
+and anonymous contract downloads. Native gRPC addressing remains available.
+
 [![CI](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/ci.yml/badge.svg)](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/DevelKit.GrpcEmbed.svg)](https://www.nuget.org/packages/DevelKit.GrpcEmbed)
 [![License](https://img.shields.io/github/license/develmax/DevelKit.GrpcEmbed)](LICENSE)

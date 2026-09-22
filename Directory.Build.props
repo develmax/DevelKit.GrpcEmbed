@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Reusable runtime client proxies, configuration-based transport selection, deterministic contract fingerprints and opt-in pre-execution contract validation. See docs/migration-2.0.md for breaking changes and staged rollout.</PackageReleaseNotes>
+    <PackageReleaseNotes>REST-compatible gRPC URLs, reusable channels, route/Protobuf consistency checks and opt-in anonymous contracts. Configured clients default to Rest routing; choose Native to preserve 2.0 addresses. See docs/url-routing.md for migration and rollout requirements.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

@@ -43,7 +43,8 @@ internal sealed class RuntimeRegistry
         Get(services);
         lock (_gate)
             return _schema ??= SchemaGenerator.Generate(_methods!,
-                services.GetRequiredService<IOptions<GrpcEmbedOptions>>().Value.Contract.Hash.Enabled);
+                services.GetRequiredService<IOptions<GrpcEmbedOptions>>().Value.Contract.Hash.Enabled,
+                services.GetRequiredService<IOptions<GrpcEmbedOptions>>().Value.Routing);
     }
     public string GetManifest(IServiceProvider services)
     {
@@ -56,6 +57,8 @@ internal sealed class RuntimeRegistry
             return _manifestJson = SchemaManifestManager.Serialize(_manifest with
             {
                 SchemaHash = options.Contract.Hash.Enabled ? GetSchema(services).Sha256 : null,
+                RoutingMode = options.Routing.Mode.ToString(),
+                RoutingPrefix = options.Routing.Prefix,
             });
         }
     }

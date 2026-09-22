@@ -25,6 +25,7 @@ public static class GrpcEmbedExtensions
         {
             configure?.Invoke(options);
             configuration.GetSection("GrpcEmbed:Server:Contract").Bind(options.Contract);
+            configuration.GetSection("GrpcEmbed:Server:Routing").Bind(options.Routing);
             options.ServerEnabled = configuration.GetValue<bool>("GrpcEmbed:Server:Enabled");
             options.ExportMode = configuration.GetValue<bool>("GrpcEmbed:Server:ExposeAll")
                 ? GrpcEmbedExportMode.All : GrpcEmbedExportMode.ExplicitOnly;
@@ -41,6 +42,7 @@ public static class GrpcEmbedExtensions
         if (configure is not null) services.Configure(configure); else services.Configure<GrpcEmbedOptions>(_ => { });
         services.TryAddSingleton<RuntimeRegistry>();
         services.TryAddSingleton<GrpcEmbedService>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<Microsoft.AspNetCore.Routing.MatcherPolicy, GrpcEmbedRouteSelectionPolicy>());
         services.AddSingleton<IServiceMethodProvider<GrpcEmbedService>, GrpcEmbedMethodProvider>();
         return services;
     }
@@ -64,6 +66,7 @@ public static class GrpcEmbedExtensions
         if (options.Contract.ExposeEndpoint && !options.Contract.Enabled)
             throw new InvalidOperationException("The contract endpoint requires contract generation.");
         var grpc = endpoints.MapGrpcService<GrpcEmbedService>();
+        GrpcEmbedRouteMapping.Configure(grpc, endpoints.ServiceProvider, options);
         if (options.Contract.Enabled && options.Contract.Generate == GrpcEmbedContractGeneration.Startup)
             endpoints.ServiceProvider.GetRequiredService<RuntimeRegistry>().GetManifest(endpoints.ServiceProvider);
         if (options.Contract.Validation != GrpcEmbedContractValidation.Disabled)
@@ -99,7 +102,14 @@ public static class GrpcEmbedExtensions
                 }
                 return Results.Text(registry.GetManifest(services), "application/json", Encoding.UTF8);
             });
-            if (options.SchemaAuthorizationPolicy is { Length: > 0 } policy)
+            if (options.Contract.AllowAnonymous)
+            {
+                schemaProto.AllowAnonymous();
+                metadata.AllowAnonymous();
+                descriptor.AllowAnonymous();
+                manifest.AllowAnonymous();
+            }
+            else if (options.SchemaAuthorizationPolicy is { Length: > 0 } policy)
             {
                 schemaProto.RequireAuthorization(policy);
                 metadata.RequireAuthorization(policy);
