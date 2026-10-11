@@ -21,3 +21,6 @@ coverage/
 *.runtimeconfig.json
 .DS_Store
 Thumbs.db
+
+# Private corporate pilots, credentials and diagnostic artifacts.
+/mytest/

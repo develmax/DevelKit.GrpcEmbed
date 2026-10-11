@@ -49,11 +49,11 @@ Choose **one** of these application-level installation commands:
 
 ```shell
 # Server and client
-dotnet add package DevelKit.GrpcEmbed --version 2.1.1
+dotnet add package DevelKit.GrpcEmbed --version 2.1.2
 # Server only
-dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 2.1.1
+dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 2.1.2
 # Client only
-dotnet add package DevelKit.GrpcEmbed.Client --version 2.1.1
+dotnet add package DevelKit.GrpcEmbed.Client --version 2.1.2
 ```
 
 The bundle pulls in `AspNetCore` and `Client`; both pull in `Core` and
@@ -111,9 +111,13 @@ public Task<UserDto> Get(int id, CancellationToken cancellationToken) => LoadUse
 
 ## Client
 
-The current source version is **2.1.1**. Before upgrading from
+The current source version is **2.1.2**. Before upgrading from
 1.0.0, read the [migration guide](docs/migration-2.0.md) and
 [changelog](CHANGELOG.md). Source version does not imply NuGet publication.
+If this source patch has not been published yet, use the locally built packages
+instead of expecting the installation commands to resolve it from NuGet.org.
+The 2.1.2 client restores omitted empty wrapped responses without changing the
+wire contract and works with existing 2.1.1 servers.
 For upgrades from 2.0, also read the [2.1 routing migration notes](docs/url-routing.md).
 See [runtime client integration](docs/runtime-clients.md) and
 [configurable contract safety](docs/contract-safety.md) for the new opt-in APIs.

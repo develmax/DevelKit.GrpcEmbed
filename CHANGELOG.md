@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 2.1.2 — 2026-10-11
+
+- Restore empty collections, arrays, strings and byte arrays in successful
+  wrapped client responses when Protobuf omits their default/empty field.
+- Keep genuine null MVC results as RPC errors; do not normalize nullable DTO
+  properties or bypass completion/status validation.
+- Compile empty-value construction once per response type, retaining reusable
+  runtime proxies and channels without per-call reflection.
+- Client-only correction: no protobuf field-number, schema-hash or server
+  configuration changes. Existing 2.1.1 servers remain compatible.
+- Add regression coverage for empty/nonempty collection interfaces and arrays,
+  empty strings/bytes, and genuine null-result errors.
+
 ## 2.1.1
 
 - Use HTTP/2 exactly for opted-in HTTP contract discovery without changing named HTTP client defaults or unrelated REST requests.

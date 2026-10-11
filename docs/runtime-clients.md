@@ -122,6 +122,20 @@ declare its response type explicitly.
 
 ## Verification and remaining work
 
+### Empty wrapped responses (2.1.2)
+
+Protobuf omits empty repeated fields and empty string/byte defaults. A successful
+wrapped response is therefore restored as an empty CLR collection, array,
+string or byte array instead of a null wrapper value. Standard collection
+interfaces use assignable List/HashSet/Dictionary implementations; supported
+concrete collections use their empty constructor. This does not recursively
+replace nullable properties inside DTOs. Genuine null MVC action results are
+still rejected by the server with NotFound and are not converted to success.
+
+The correction is client-only and retains the existing wire contract and schema
+hash. Updating the client is sufficient for an existing 2.1.1 server. It does not
+weaken trailer validation, contract checking, authorization, or retry rules.
+
 Library integration tests cover both protocols, cancellation overloads, local
 identity properties, transport selection, disposal, missing-operation errors,
 and completion-only responses. A separate private test project exercises the

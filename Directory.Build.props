@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>2.1.1</Version>
+    <Version>2.1.2</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Explicit opt-in unencrypted HTTP/2 (h2c) for configured clients and schema discovery. HTTPS remains required by default for non-loopback endpoints. Global and per-client settings support overrides. See docs/runtime-clients.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Restore omitted empty repeated, string and byte values in successful wrapped gRPC responses. Preserve errors for genuine null MVC results. Client-only fix; protobuf field numbers and schema hashes are unchanged and 2.1.1 servers remain compatible. See CHANGELOG.md and docs/runtime-clients.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

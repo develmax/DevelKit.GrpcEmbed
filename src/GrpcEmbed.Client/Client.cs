@@ -342,7 +342,40 @@ internal static class ClientResponseReaders<TWireResponse, TResponse> where TWir
     {
         var input = System.Linq.Expressions.Expression.Parameter(typeof(TWireResponse));
         var property = System.Linq.Expressions.Expression.Property(input, "Value");
-        return System.Linq.Expressions.Expression.Lambda<Func<TWireResponse, TResponse>>(property, input).Compile();
+        // A successful wrapped response cannot represent a null MVC result: the server
+        // rejects it with NotFound. Protobuf omits empty strings/bytes/repeated fields,
+        // so restore their empty CLR value, not a null accidentally left by the reader.
+        var empty = EmptyValue(typeof(TResponse));
+        var result = empty is null ? (System.Linq.Expressions.Expression)property
+            : System.Linq.Expressions.Expression.Coalesce(property, empty);
+        return System.Linq.Expressions.Expression.Lambda<Func<TWireResponse, TResponse>>(result, input).Compile();
+    }
+
+    private static System.Linq.Expressions.Expression? EmptyValue(Type type)
+    {
+        if (type == typeof(string)) return System.Linq.Expressions.Expression.Constant(string.Empty);
+        if (type.IsArray && type.GetArrayRank() == 1)
+            return System.Linq.Expressions.Expression.NewArrayBounds(type.GetElementType()!, System.Linq.Expressions.Expression.Constant(0));
+        if (type.IsValueType) return null;
+        var enumerable = type.GetInterfaces().Append(type).FirstOrDefault(x =>
+            x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+        if (enumerable is null) return null;
+        var element = enumerable.GetGenericArguments()[0];
+        Type? concrete = !type.IsAbstract && type.GetConstructor(Type.EmptyTypes) is not null ? type : null;
+        if (concrete is null)
+        {
+            var candidates = new List<Type> { typeof(List<>).MakeGenericType(element), typeof(HashSet<>).MakeGenericType(element) };
+            if (element.IsGenericType && element.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
+                candidates.Add(typeof(Dictionary<,>).MakeGenericType(element.GetGenericArguments()));
+            concrete = candidates.FirstOrDefault(type.IsAssignableFrom);
+        }
+        if (concrete is not null)
+            return System.Linq.Expressions.Expression.Convert(System.Linq.Expressions.Expression.New(concrete), type);
+        var listType = typeof(List<>).MakeGenericType(element);
+        var listInterface = typeof(IList<>).MakeGenericType(element);
+        var constructor = type.GetConstructor(new[] { listInterface });
+        return constructor is null ? null : System.Linq.Expressions.Expression.New(constructor,
+            System.Linq.Expressions.Expression.Convert(System.Linq.Expressions.Expression.New(listType), listInterface));
     }
 }
 
