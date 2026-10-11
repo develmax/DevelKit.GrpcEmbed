@@ -24,7 +24,7 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       publish: ${{ steps.release.outputs.publish }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Validate version and release source
@@ -62,7 +62,7 @@ jobs:
     needs: [validate, build, security]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: DevelKit.GrpcEmbed-packages
@@ -84,7 +84,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
