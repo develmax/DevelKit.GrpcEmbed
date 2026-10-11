@@ -57,8 +57,7 @@ public sealed class ConfiguredH2cTests
             {
                 // Keep a non-loopback URI so the configured-client security gate is exercised.
                 http.BaseAddress = new Uri($"http://cluster.example:{endpoint.Port}/api/users");
-                http.DefaultRequestVersion = HttpVersion.Version20;
-                http.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
+                Assert.Equal(HttpVersion.Version11, http.DefaultRequestVersion);
             }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
                 UseProxy = false,

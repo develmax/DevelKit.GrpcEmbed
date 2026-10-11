@@ -93,7 +93,10 @@ Alternatively, enable the global flag and set an individual client's flag to
 `false` to require HTTPS for that client. This setting neither enables gRPC itself
 nor changes server listeners. The receiving listener and any intermediary must
 support HTTP/2 without TLS; gRPC requests do not fall back to HTTP/1.1 or REST.
-Contract discovery still uses the configured HTTP client's normal HTTP behavior.
+With the opt-in enabled, HTTP contract discovery also uses HTTP/2 exactly, so it
+can reach an HTTP/2-only listener even when the named client's default is HTTP/1.1.
+HTTPS discovery retains the named client's configured HTTP version policy. The
+named client's defaults and unrelated REST requests are not changed.
 
 **Security:** h2c does not encrypt traffic. Bearer tokens, headers, contract metadata
 and payloads are visible to parties able to inspect the network path. Use this

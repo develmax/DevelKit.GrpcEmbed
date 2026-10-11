@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ## 2.1.1
 
+- Use HTTP/2 exactly for opted-in HTTP contract discovery without changing named HTTP client defaults or unrelated REST requests.
+
 - Add explicit `GrpcEmbed:Clients:AllowUnencryptedHttp2` and per-client
   `Grpc:AllowUnencryptedHttp2` settings for trusted-network h2c integrations.
   The per-client flag overrides the global default, including explicit false.

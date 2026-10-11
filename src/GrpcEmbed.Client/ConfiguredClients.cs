@@ -55,6 +55,7 @@ public static class GrpcEmbedConfiguredClientsExtensions
                     DisposeHttpClient = true,
                     ServiceName = serviceName,
                     Contract = contract,
+                    RequireHttp2ForContract = allowUnencryptedHttp2 && contract.Address.Scheme == Uri.UriSchemeHttp,
                     Routing = routing,
                     DefaultTimeout = http.Timeout == Timeout.InfiniteTimeSpan ? null : http.Timeout,
                 };
