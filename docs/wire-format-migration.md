@@ -1,9 +1,8 @@
 # Standard Protobuf wire-format correction
 
-The unreleased interoperability fix changes the wire encoding of special CLR
+The 3.0.0 interoperability fix changes the wire encoding of special CLR
 types. Do not overwrite published 2.1.2 packages or treat this as a wire-compatible
-rolling upgrade. A new major release is recommended; no release tag or package
-version has been assigned by this change.
+rolling upgrade. All five packages are released together as version 3.0.0.
 
 ## What was wrong
 
@@ -53,7 +52,7 @@ Property field numbers remain unchanged. JSON REST endpoints are unaffected.
    operational version coordination; fingerprints cannot protect calls that do
    not use them. There is no automatic REST fallback or legacy binary decoder.
 
-The existing stand and diagnostic files continue to describe the deployed 2.1.2
-server until a new release is published and deployed. Updating source alone does
-not change its responses. Do not edit a downloaded schema to pretend legacy GUID
+Existing deployments and diagnostic files describe the deployed server version
+until 3.0.0 is installed and their contracts refreshed. Updating source alone does
+not change server responses. Do not edit a downloaded schema to pretend legacy GUID
 bytes are strings; migrate the serializer and server together.
