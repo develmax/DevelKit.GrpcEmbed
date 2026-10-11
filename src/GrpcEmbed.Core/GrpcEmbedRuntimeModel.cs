@@ -33,7 +33,10 @@ public static class GrpcEmbedRuntimeModel
         if (IsBuiltIn(type) || type.IsEnum || !Configured.Add(type)) return;
         var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Public).Where(x => x.CanRead && x.CanWrite && x.GetIndexParameters().Length == 0).ToArray();
         var numbers = GrpcEmbedFieldNumbers.Assign(properties);
-        var meta = Model.Add(type, false);
+        // Add(..., false) skips default behavior, including compatibility-level
+        // resolution. Set it explicitly before adding fields so Guid/decimal
+        // and DateTime/TimeSpan match the exported standard Protobuf schema.
+        var meta = Model.Add(type, false, CompatibilityLevel.Level300);
         foreach (var property in properties) { meta.Add(numbers[property.Name], property.Name); ConfigureCore(property.PropertyType); }
     }
 
