@@ -10,6 +10,9 @@ HTTP/2 by default, with opt-in HTTP/3 support. See [transport support](#transpor
 
 NuGet package: `DevelKit.GrpcEmbed`.
 
+Maintainers: [automated NuGet.org releases](docs/nuget-publishing.md) publish
+packages and symbols from version tags after CI and CodeQL.
+
 Version 2.1 adds [REST-compatible gRPC URLs](docs/url-routing.md): keep the same
 application path and HTTPS port for REST and gRPC, with configurable addressing
 and anonymous contract downloads. Native gRPC addressing remains available.

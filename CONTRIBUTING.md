@@ -13,3 +13,8 @@ dotnet test tests\GrpcEmbed.Tests\GrpcEmbed.Tests.csproj -c Release
 Changes to public contracts must include schema compatibility tests. Changes to the transport hot path must preserve interoperability with standard gRPC clients and keep JSON out of the gRPC path.
 
 Before opening a pull request, make sure the build completes without warnings or errors.
+
+## Publishing releases
+
+See [automated NuGet.org publishing](docs/nuget-publishing.md) for the one-time
+Trusted Publishing policy, version tags, safe dry runs and partial-release retries.

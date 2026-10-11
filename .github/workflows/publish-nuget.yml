@@ -1,0 +1,114 @@
+name: Publish NuGet
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish an existing version tag (false = dry run only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuget-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      publish: ${{ steps.release.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Validate version and release source
+        id: release
+        shell: pwsh
+        env:
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_EVENT: ${{ github.event_name }}
+          PUBLISH_REQUESTED: ${{ inputs.publish }}
+        run: |
+          . ./.github/scripts/NuGetRelease.ps1
+          [xml]$props = Get-Content Directory.Build.props -Raw
+          $plan = Get-NuGetReleasePlan -Version $props.Project.PropertyGroup.Version -Ref $env:RELEASE_REF -Event $env:RELEASE_EVENT -PublishRequested ($env:PUBLISH_REQUESTED -eq 'true')
+          if ($plan.Publish -and '${{ github.repository }}' -ne 'develmax/DevelKit.GrpcEmbed') { throw 'Publication is restricted to the upstream repository.' }
+          if ($env:RELEASE_REF.StartsWith('refs/tags/')) {
+            git merge-base --is-ancestor HEAD origin/main
+            if ($LASTEXITCODE -ne 0) { throw 'A release tag must point to a commit in main history.' }
+          }
+          "version=$($plan.Version)" >> $env:GITHUB_OUTPUT
+          "publish=$($plan.Publish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+  build:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  security:
+    needs: validate
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/codeql.yml
+
+  dry-run:
+    if: needs.validate.outputs.publish != 'true'
+    needs: [validate, build, security]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: DevelKit.GrpcEmbed-packages
+          path: artifacts/packages
+      - name: Validate all packages without authentication or upload
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          . ./.github/scripts/NuGetRelease.ps1
+          Push-NuGetReleaseArtifacts -Directory artifacts/packages -Version $env:RELEASE_VERSION -Commit '${{ github.sha }}'
+
+  publish:
+    if: needs.validate.outputs.publish == 'true'
+    needs: [validate, build, security]
+    runs-on: ubuntu-24.04
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: DevelKit.GrpcEmbed-packages
+          path: artifacts/packages
+      - name: Validate package IDs, versions, symbols and source commit
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          . ./.github/scripts/NuGetRelease.ps1
+          $null = Test-NuGetReleaseArtifacts -Directory artifacts/packages -Version $env:RELEASE_VERSION -Commit '${{ github.sha }}'
+      - name: Exchange GitHub OIDC token for a short-lived NuGet key
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1, Node.js 24
+        with:
+          user: ${{ vars.NUGET_USER || 'develmax' }}
+      - name: Publish packages and symbols to NuGet.org
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          . ./.github/scripts/NuGetRelease.ps1
+          Push-NuGetReleaseArtifacts -Directory artifacts/packages -Version $env:RELEASE_VERSION -Commit '${{ github.sha }}' -Publish
