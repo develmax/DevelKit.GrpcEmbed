@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 3.0.0 — 2026-10-12
+
 - Fix standard Protobuf interoperability for GUID, decimal, DateTime and TimeSpan
   by explicitly selecting compatibility level 300 for manually registered types.
 - Unwrap nullable collection element types in exported .proto and reflection
@@ -16,7 +18,7 @@ All notable changes to this project are documented in this file.
   revisions. Upgrade clients and servers together; old/new model shapes fail
   contract preparation even after a hash refresh. See
   [wire-format migration](docs/wire-format-migration.md). This is not a compatible
-  replacement for 2.1.2 and must not be published under the existing version.
+  replacement for 2.1.2. Upgrade clients and servers together.
 
 ## 2.1.2 — 2026-10-11
 

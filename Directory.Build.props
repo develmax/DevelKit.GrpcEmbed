@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>2.1.2</Version>
+    <Version>3.0.0</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Restore omitted empty repeated, string and byte values in successful wrapped gRPC responses. Preserve errors for genuine null MVC results. Client-only fix; protobuf field numbers and schema hashes are unchanged and 2.1.1 servers remain compatible. See CHANGELOG.md and docs/runtime-clients.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Breaking wire-format correction: standard Protobuf GUID, decimal, Timestamp and Duration encoding; valid nullable collection schemas and reflection descriptors. New contract and model-shape fingerprints reject legacy serializers. Upgrade clients and servers together. See CHANGELOG.md and docs/wire-format-migration.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
