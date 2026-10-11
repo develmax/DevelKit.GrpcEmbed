@@ -46,7 +46,7 @@ internal static class SchemaGenerator
             .ThenBy(method => method.MethodName, StringComparer.Ordinal)
             .Select(SchemaManifestManager.GetRoute));
         var hash = computeHash ? Convert.ToHexString(SHA256.HashData(
-            Encoding.UTF8.GetBytes("grpcembed-contract-v2\n" + proto + "\n" + routes + "\n" +
+            Encoding.UTF8.GetBytes("grpcembed-contract-v3-level300\n" + proto + "\n" + routes + "\n" +
                 (routing?.Mode ?? GrpcEmbedRoutingMode.Native) + "\n" + (routing?.Prefix ?? "grpc")))).ToLowerInvariant() : string.Empty;
         return new GrpcEmbedSchema(proto, hash, set.ToByteArray(), set.File.Select(x => x.ToByteArray()).ToArray(), methods.Select(x => "GrpcEmbed." + x.ServiceName).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray());
     }
@@ -77,7 +77,7 @@ internal static class SchemaGenerator
             var memberType = Nullable.GetUnderlyingType(member.PropertyType) ?? member.PropertyType;
             Type? element = null;
             var repeated = memberType != typeof(string) && memberType != typeof(byte[]) && TryElement(memberType, out element);
-            var actual = repeated ? element! : memberType;
+            var actual = repeated ? Nullable.GetUnderlyingType(element!) ?? element! : memberType;
             AddMessage(actual, messages);
             text.Append("  ").Append(repeated ? "repeated " : string.Empty).Append(ProtoType(actual)).Append(' ').Append(ToSnake(member.Name)).Append(" = ").Append(numbers[member.Name].ToString(CultureInfo.InvariantCulture)).Append(";\n");
         }
@@ -139,9 +139,13 @@ internal static class SchemaGenerator
         {
             var memberType = Nullable.GetUnderlyingType(member.PropertyType) ?? member.PropertyType; Type? element = null;
             var repeated = memberType != typeof(string) && memberType != typeof(byte[]) && TryElement(memberType, out element);
-            var actual = repeated ? element! : memberType; AddDescriptorMessage(actual, file, seen);
+            var actual = repeated ? Nullable.GetUnderlyingType(element!) ?? element! : memberType; AddDescriptorMessage(actual, file, seen);
             var field = new FieldDescriptorProto { Name = ToSnake(member.Name), Number = numbers[member.Name], Label = repeated ? FieldDescriptorProto.Types.Label.Repeated : FieldDescriptorProto.Types.Label.Optional };
-            (field.Type, field.TypeName) = DescriptorType(actual);
+            var descriptorType = DescriptorType(actual);
+            field.Type = descriptorType.Item1;
+            // An explicitly present empty type_name is not the same as absent:
+            // standard descriptor resolvers try to resolve it as a symbol.
+            if (descriptorType.Item2.Length != 0) field.TypeName = descriptorType.Item2;
             message.Field.Add(field);
         }
         file.MessageType.Add(message);
