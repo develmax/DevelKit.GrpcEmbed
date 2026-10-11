@@ -60,7 +60,7 @@ jobs:
             dotnet pack $project -c Release --no-build --no-restore -o artifacts/packages
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: DevelKit.GrpcEmbed-packages
           path: artifacts/packages/*.*nupkg
