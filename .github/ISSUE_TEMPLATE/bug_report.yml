@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a reproducible problem with GrpcEmbed.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For vulnerabilities, use private reporting on the Security tab, not this form.
+        Remove tokens, credentials, personal data, and private service URLs from all examples.
+  - type: input
+    id: version
+    attributes:
+      label: Packages and versions
+      placeholder: DevelKit.GrpcEmbed.AspNetCore 2.1.2
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and configuration
+      description: .NET version, OS, server/client packages, HTTP/2 or HTTP/3, TLS or h2c, URL mode, and relevant sanitized configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Steps, a small code sample, or a public reproduction repository. Include relevant DTOs and routes for contract problems.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized diagnostics
+      description: Include exceptions, gRPC status/trailers, and schema hashes when relevant. Do not paste authorization headers or business payloads containing personal data.
+    validations:
+      required: true

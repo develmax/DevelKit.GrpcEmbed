@@ -2,7 +2,10 @@
 
 Do not disclose vulnerability details in public issues.
 
-Use GitHub Security Advisories in this repository to privately report vulnerabilities to the project owner. Include the affected version, steps to reproduce, and potential impact.
+Use [private vulnerability reporting](https://github.com/develmax/DevelKit.GrpcEmbed/security/advisories/new)
+to report vulnerabilities to the project owner. Include the affected version,
+steps to reproduce, and potential impact. This creates a private advisory, not a
+public issue. Remove unrelated credentials and personal data from reproductions.
 
 Security fixes are released for the latest supported version.
 
@@ -20,6 +23,12 @@ encryption. Keep HTTPS for external or untrusted connections. See
 [runtime client configuration](docs/runtime-clients.md#explicit-unencrypted-http2-h2c-opt-in).
 
 ## Automated analysis
+
+Dependabot alerts and security updates are enabled. The
+[Dependabot configuration](.github/dependabot.yml) also checks NuGet packages and
+GitHub Actions weekly for version updates. Updates are proposed as pull requests;
+they are not automatically merged and must pass the protected branch's checks.
+Secret scanning and push protection help detect accidental credential exposure.
 
 The [CodeQL workflow](.github/workflows/codeql.yml) analyzes C# on pull requests
 to `main`, pushes to `main`, and weekly. Maintainers can also run it manually.

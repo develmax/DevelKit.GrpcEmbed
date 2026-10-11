@@ -2,6 +2,11 @@
 
 Thank you for your interest in GrpcEmbed.
 
+Please follow our [Code of Conduct](CODE_OF_CONDUCT.md). Use the repository's
+issue forms for bug reports, feature requests, and accessibility barriers. See
+[ACCESSIBILITY.md](ACCESSIBILITY.md) for our accessibility goals and limitations.
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
 ## Local validation
 
 ```powershell
