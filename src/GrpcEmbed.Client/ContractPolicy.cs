@@ -90,8 +90,8 @@ internal sealed class ClientContractState
             var address = _options.Contract.Address ?? new Uri(_options.Address, "/_grpcembed/schema.json");
             using var request = new HttpRequestMessage(HttpMethod.Get, address)
             {
-                Version = _options.HttpClient!.DefaultRequestVersion,
-                VersionPolicy = _options.HttpClient.DefaultVersionPolicy,
+                Version = _options.RequireHttp2ForContract ? HttpVersion.Version20 : _options.HttpClient!.DefaultRequestVersion,
+                VersionPolicy = _options.RequireHttp2ForContract ? HttpVersionPolicy.RequestVersionExact : _options.HttpClient!.DefaultVersionPolicy,
             };
             if (_snapshot is { } existing) request.Headers.TryAddWithoutValidation("If-None-Match", "\"" + existing.Hash + "\"");
             // Per-call metadata is never stored in the shared contract snapshot.
