@@ -1,0 +1,22 @@
+name: Accessibility report
+description: Report a barrier in documentation or developer tooling.
+title: "[Accessibility] "
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Affected page or tool
+    validations:
+      required: true
+  - type: textarea
+    id: barrier
+    attributes:
+      label: Task and barrier
+      description: What were you trying to do, what prevented it, and what change would help? Do not include medical information or private data.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment (optional)
+      description: Browser, OS, terminal, IDE, or assistive technology, if useful.
