@@ -49,11 +49,11 @@ Choose **one** of these application-level installation commands:
 
 ```shell
 # Server and client
-dotnet add package DevelKit.GrpcEmbed --version 2.1.0
+dotnet add package DevelKit.GrpcEmbed --version 2.1.1
 # Server only
-dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 2.1.0
+dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 2.1.1
 # Client only
-dotnet add package DevelKit.GrpcEmbed.Client --version 2.1.0
+dotnet add package DevelKit.GrpcEmbed.Client --version 2.1.1
 ```
 
 The bundle pulls in `AspNetCore` and `Client`; both pull in `Core` and
@@ -111,7 +111,7 @@ public Task<UserDto> Get(int id, CancellationToken cancellationToken) => LoadUse
 
 ## Client
 
-The current source version is **2.1.0**. Before upgrading from
+The current source version is **2.1.1**. Before upgrading from
 1.0.0, read the [migration guide](docs/migration-2.0.md) and
 [changelog](CHANGELOG.md). Source version does not imply NuGet publication.
 For upgrades from 2.0, also read the [2.1 routing migration notes](docs/url-routing.md).

@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 2.1.1
+
+- Add explicit `GrpcEmbed:Clients:AllowUnencryptedHttp2` and per-client
+  `Grpc:AllowUnencryptedHttp2` settings for trusted-network h2c integrations.
+  The per-client flag overrides the global default, including explicit false.
+- Keep HTTPS required by default for non-loopback addresses. The opt-in applies
+  to both RPC and contract discovery addresses and never permits non-HTTP schemes
+  or disables TLS certificate validation.
+
 ## 2.1.0
 
 - Validate resolved contract download URLs as well as gRPC endpoints for HTTPS.

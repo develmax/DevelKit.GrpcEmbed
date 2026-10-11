@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>2.1.0</Version>
+    <Version>2.1.1</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>REST-compatible gRPC URLs, reusable channels, route/Protobuf consistency checks and opt-in anonymous contracts. Configured clients default to Rest routing; choose Native to preserve 2.0 addresses. See docs/url-routing.md for migration and rollout requirements.</PackageReleaseNotes>
+    <PackageReleaseNotes>Explicit opt-in unencrypted HTTP/2 (h2c) for configured clients and schema discovery. HTTPS remains required by default for non-loopback endpoints. Global and per-client settings support overrides. See docs/runtime-clients.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

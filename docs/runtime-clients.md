@@ -58,9 +58,48 @@ See [contract safety](contract-safety.md) for fetching, validation and retry pol
 
 Grpc.Address is required if the REST BaseAddress contains a path; integration
 does not guess which path segments an ingress removes. Non-loopback endpoints
-must use HTTPS. Existing HTTP authentication and request handlers remain active.
+must use HTTPS unless explicitly opted into unencrypted HTTP/2 as described below.
+Existing HTTP authentication and request handlers remain active.
 Existing handler retry and certificate policies are not silently overwritten:
 the application must configure them appropriately, especially for writes.
+
+## Explicit unencrypted HTTP/2 (h2c) opt-in
+
+Since 2.1.1, configured clients can opt into non-loopback HTTP endpoints. By default,
+`GrpcEmbed:Clients:AllowUnencryptedHttp2` is `false`. The existing client's
+`Grpc:AllowUnencryptedHttp2` overrides the global value, including explicit `false`.
+The effective setting validates both the RPC address and the contract discovery
+address before network access. Loopback HTTP remains available without an opt-in.
+
+Prefer enabling only a specific trusted in-cluster client:
+
+```yaml
+GrpcEmbed:
+  Clients:
+    Enabled: false
+    AllowUnencryptedHttp2: false
+ExistingClient:
+  Grpc:
+    Enabled: true
+    AllowUnencryptedHttp2: true
+    Address: http://receiving-service:8085/api/v1
+    Contract:
+      Fetch: FirstCall
+      Address: http://receiving-service:8085/_grpcembed/schema.json
+      SendHash: true
+```
+
+Alternatively, enable the global flag and set an individual client's flag to
+`false` to require HTTPS for that client. This setting neither enables gRPC itself
+nor changes server listeners. The receiving listener and any intermediary must
+support HTTP/2 without TLS; gRPC requests do not fall back to HTTP/1.1 or REST.
+Contract discovery still uses the configured HTTP client's normal HTTP behavior.
+
+**Security:** h2c does not encrypt traffic. Bearer tokens, headers, contract metadata
+and payloads are visible to parties able to inspect the network path. Use this
+only on a trusted network with appropriate access controls, or with independently
+verified transport encryption. For external or untrusted networks, keep HTTPS.
+The opt-in does not disable TLS certificate validation or allow non-HTTP schemes.
 
 ## Server
 
@@ -85,7 +124,6 @@ identity properties, transport selection, disposal, missing-operation errors,
 and completion-only responses. A separate private test project exercises the
 actual corporate registration package without changing that package.
 
-Pending: migrate the pilot service
-registrations and configuration, remove manual adapters, update chart templates,
-prepare package versions, and run service-level tests. Automatic compatibility
+Deployments must validate their own authentication, middleware and proxy chain;
+library tests alone do not establish end-to-end compatibility. Automatic compatibility
 negotiation beyond exact model matching is intentionally deferred.

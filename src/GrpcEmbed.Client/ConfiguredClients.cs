@@ -18,6 +18,8 @@ public static class GrpcEmbedConfiguredClientsExtensions
             var enabled = section.GetValue<bool?>("Grpc:Enabled")
                 ?? configuration.GetValue<bool>("GrpcEmbed:Clients:Enabled");
             if (!enabled) return null;
+            var allowUnencryptedHttp2 = section.GetValue<bool?>("Grpc:AllowUnencryptedHttp2")
+                ?? configuration.GetValue<bool>("GrpcEmbed:Clients:AllowUnencryptedHttp2");
             var serviceName = section["Grpc:ServiceName"];
             var contract = new GrpcEmbedClientContractOptions();
             var routing = new GrpcEmbedClientRoutingOptions { Mode = GrpcEmbedRoutingMode.Rest };
@@ -39,13 +41,13 @@ public static class GrpcEmbedConfiguredClientsExtensions
                 if (routing.Mode == GrpcEmbedRoutingMode.Native && configuredAddress is null && baseAddress.AbsolutePath != "/")
                     throw new InvalidOperationException($"{name}:Grpc:Address is required when REST BaseAddress contains a path.");
                 var address = configuredAddress is null ? baseAddress : new Uri(configuredAddress, UriKind.Absolute);
-                RequireSecureAddress(address);
+                RequireSecureAddress(address, allowUnencryptedHttp2);
                 // Resolve relative contract URLs exactly as the named HttpClient would,
                 // then retain the validated absolute address for subsequent requests.
                 contract.Address = contract.Address is null
                     ? new Uri(address, "/_grpcembed/schema.json")
                     : contract.Address.IsAbsoluteUri ? contract.Address : new Uri(baseAddress, contract.Address);
-                RequireSecureAddress(contract.Address);
+                RequireSecureAddress(contract.Address, allowUnencryptedHttp2);
                 var options = new GrpcEmbedClientOptions
                 {
                     Address = address,
@@ -64,11 +66,11 @@ public static class GrpcEmbedConfiguredClientsExtensions
         return services;
     }
 
-    private static void RequireSecureAddress(Uri address)
+    private static void RequireSecureAddress(Uri address, bool allowUnencryptedHttp2)
     {
         if (address.Scheme != Uri.UriSchemeHttps &&
-            !(address.Scheme == Uri.UriSchemeHttp && address.IsLoopback))
-            throw new InvalidOperationException("Non-loopback GrpcEmbed endpoints require HTTPS.");
+            !(address.Scheme == Uri.UriSchemeHttp && (address.IsLoopback || allowUnencryptedHttp2)))
+            throw new InvalidOperationException("GrpcEmbed endpoints require HTTPS, except loopback HTTP or explicit AllowUnencryptedHttp2 opt-in.");
     }
 
     private sealed class ClientWarmup : IHostedService

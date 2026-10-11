@@ -8,6 +8,55 @@ namespace GrpcEmbed.Tests;
 public sealed class ClientOwnershipAndSecurityTests
 {
     [Theory]
+    [InlineData(null, null, false)]
+    [InlineData("false", null, false)]
+    [InlineData("true", null, true)]
+    [InlineData("false", "true", true)]
+    [InlineData("true", "false", false)]
+    [InlineData(null, "true", true)]
+    public void Unencrypted_remote_endpoints_require_explicit_opt_in(string? global, string? local, bool allowed)
+    {
+        foreach (var validateContract in new[] { false, true })
+        {
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["GrpcEmbed:Clients:Enabled"] = "true",
+                ["GrpcEmbed:Clients:AllowUnencryptedHttp2"] = global,
+                ["Existing:Grpc:AllowUnencryptedHttp2"] = local,
+                ["Existing:Grpc:Address"] = validateContract ? "https://grpc.example/" : "http://cluster.example/",
+                ["Existing:Grpc:Contract:Address"] = validateContract ? "http://cluster.example/schema.json" : "https://grpc.example/schema.json",
+            }).Build();
+            var services = new ServiceCollection();
+            services.AddHttpClient("Existing", http => http.BaseAddress = new Uri("https://grpc.example/"));
+            services.AddSingleton<ITestClient>(_ => new AsyncClient());
+            services.AddConfiguredGrpcEmbedClients<IMarker>(configuration, _ => "Existing");
+            using var provider = services.BuildServiceProvider();
+            if (allowed) Assert.NotNull(provider.GetRequiredService<ITestClient>());
+            else Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ITestClient>());
+        }
+    }
+
+    [Theory]
+    [InlineData("ftp://cluster.example/", "https://grpc.example/schema.json")]
+    [InlineData("https://grpc.example/", "ftp://cluster.example/schema.json")]
+    public void Opt_in_does_not_allow_non_http_schemes(string address, string contract)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["GrpcEmbed:Clients:Enabled"] = "true",
+            ["GrpcEmbed:Clients:AllowUnencryptedHttp2"] = "true",
+            ["Existing:Grpc:Address"] = address,
+            ["Existing:Grpc:Contract:Address"] = contract,
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddHttpClient("Existing", http => http.BaseAddress = new Uri("https://grpc.example/"));
+        services.AddSingleton<ITestClient>(_ => new AsyncClient());
+        services.AddConfiguredGrpcEmbedClients<IMarker>(configuration, _ => "Existing");
+        using var provider = services.BuildServiceProvider();
+        Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<ITestClient>());
+    }
+
+    [Theory]
     [InlineData("http://remote.example/schema.json", false)]
     [InlineData("//remote.example/schema.json", false)]
     [InlineData("https://remote.example/schema.json", true)]
