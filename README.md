@@ -18,6 +18,7 @@ application path and HTTPS port for REST and gRPC, with configurable addressing
 and anonymous contract downloads. Native gRPC addressing remains available.
 
 [![CI](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/ci.yml/badge.svg)](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/develmax/DevelKit.GrpcEmbed/actions/workflows/codeql.yml)
 [![NuGet](https://img.shields.io/nuget/v/DevelKit.GrpcEmbed.svg)](https://www.nuget.org/packages/DevelKit.GrpcEmbed)
 [![License](https://img.shields.io/github/license/develmax/DevelKit.GrpcEmbed)](LICENSE)
 
