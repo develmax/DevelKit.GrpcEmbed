@@ -17,10 +17,12 @@ public sealed class PayloadAuditTests
     {
         var requests = new ConcurrentQueue<object?>();
         var responses = new ConcurrentQueue<object?>();
+        var serverVerbs = new ConcurrentQueue<string?>();
         using var server = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
             services.PostConfigure<GrpcEmbedOptions>(options => options.Routing.Mode = GrpcEmbedRoutingMode.Rest);
-            services.AddSingleton<IStartupFilter>(new AuditStartup(requests, responses));
+            services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(options => options.Conventions.Add(new MultiVerbConvention()));
+            services.AddSingleton<IStartupFilter>(new AuditStartup(requests, responses, serverVerbs));
         }));
         using var handler = new AuditHandler { InnerHandler = server.Server.CreateHandler() };
         using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/users") };
@@ -40,6 +42,8 @@ public sealed class PayloadAuditTests
         Assert.Same(created, handler.Responses.Single());
         Assert.Equal(dto.Name, Assert.IsType<CreateUserRequest>(requests.Single()).Name);
         Assert.Equal(created.Name, Assert.IsType<UserDto>(responses.Single()).Name);
+        Assert.Equal("POST", handler.Verbs.Single());
+        Assert.Equal(handler.Verbs.Single(), serverVerbs.Single());
         Assert.Null(GrpcEmbedClientPayloadAudit.Current);
         var values = await Task.WhenAll(Enumerable.Range(1, 20).Select(id => client.GetAsync(id, default)));
         Assert.Equal(Enumerable.Range(1, 20), values.Select(x => x.Id));
@@ -65,6 +69,7 @@ public sealed class PayloadAuditTests
         public ConcurrentQueue<object?> Requests { get; } = new();
         public ConcurrentQueue<object?> Responses { get; } = new();
         public ConcurrentQueue<int> Statuses { get; } = new();
+        public ConcurrentQueue<string?> Verbs { get; } = new();
         public int Completions, Releases;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
@@ -73,6 +78,7 @@ public sealed class PayloadAuditTests
                 var audit = GrpcEmbedClientPayloadAudit.Current;
                 Assert.NotNull(audit);
                 Requests.Enqueue(audit.RequestBody);
+                Verbs.Enqueue(audit.HttpMethod);
                 audit.Completed = (value, status) => { Responses.Enqueue(value); Statuses.Enqueue(status); Interlocked.Increment(ref Completions); };
                 audit.Released = () => Interlocked.Increment(ref Releases);
             }
@@ -80,7 +86,21 @@ public sealed class PayloadAuditTests
         }
     }
 
-    private sealed class AuditStartup(ConcurrentQueue<object?> requests, ConcurrentQueue<object?> responses) : IStartupFilter
+    private sealed class MultiVerbConvention : Microsoft.AspNetCore.Mvc.ApplicationModels.IActionModelConvention
+    {
+        public void Apply(Microsoft.AspNetCore.Mvc.ApplicationModels.ActionModel action)
+        {
+            if (action.Controller.ControllerType != typeof(UsersController) || action.ActionName != "Create") return;
+            foreach (var selector in action.Selectors)
+            {
+                foreach (var constraint in selector.ActionConstraints.OfType<Microsoft.AspNetCore.Mvc.ActionConstraints.HttpMethodActionConstraint>().ToArray())
+                    selector.ActionConstraints.Remove(constraint);
+                selector.ActionConstraints.Add(new Microsoft.AspNetCore.Mvc.ActionConstraints.HttpMethodActionConstraint(new[] { "PUT", "POST" }));
+            }
+        }
+    }
+
+    private sealed class AuditStartup(ConcurrentQueue<object?> requests, ConcurrentQueue<object?> responses, ConcurrentQueue<string?> verbs) : IStartupFilter
     {
         public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
         {
@@ -89,7 +109,7 @@ public sealed class PayloadAuditTests
                 if (context.Request.ContentType == "application/grpc")
                 {
                     context.Items[GrpcEmbedPayloadAuditContract.CaptureResponseKey] = true;
-                    context.Items[GrpcEmbedPayloadAuditContract.RequestObserverKey] = new Action<object?, string?>((body, _) => requests.Enqueue(body));
+                    context.Items[GrpcEmbedPayloadAuditContract.RequestObserverKey] = new Action<object?, string?>((body, verb) => { requests.Enqueue(body); verbs.Enqueue(verb); });
                     await continuation();
                     if (context.Items.TryGetValue(GrpcEmbedPayloadAuditContract.ResponseKey, out var result)) responses.Enqueue(result);
                 }

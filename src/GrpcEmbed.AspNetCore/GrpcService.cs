@@ -271,8 +271,7 @@ internal sealed class GrpcEmbedMethodProvider : IServiceMethodProvider<GrpcEmbed
         var bodyParameter = runtime.Action.Parameters.OfType<ControllerParameterDescriptor>()
             .SingleOrDefault(p => p.BindingInfo?.BindingSource?.Id == "Body");
         var bodyIndex = bodyParameter is null ? -1 : Array.FindIndex(runtime.Parameters.ToArray(), p => p == bodyParameter.ParameterInfo);
-        var verb = runtime.Action.ActionConstraints?.OfType<Microsoft.AspNetCore.Mvc.ActionConstraints.HttpMethodActionConstraint>()
-            .SelectMany(x => x.HttpMethods).FirstOrDefault();
+        var verb = SchemaManifestManager.GetRoute(runtime).HttpMethods.FirstOrDefault();
         var auditContract = new GrpcEmbedPayloadAuditContract(
             value => bodyIndex < 0 ? null : runtime.RequestReaders[bodyIndex](value), verb);
         var metadata = runtime.Action.EndpointMetadata.Where(x => x is not Microsoft.AspNetCore.Routing.IHttpMethodMetadata)
