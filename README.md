@@ -53,11 +53,11 @@ Choose **one** of these application-level installation commands:
 
 ```shell
 # Server and client
-dotnet add package DevelKit.GrpcEmbed --version 3.0.0
+dotnet add package DevelKit.GrpcEmbed --version 3.0.1
 # Server only
-dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 3.0.0
+dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 3.0.1
 # Client only
-dotnet add package DevelKit.GrpcEmbed.Client --version 3.0.0
+dotnet add package DevelKit.GrpcEmbed.Client --version 3.0.1
 ```
 
 The bundle pulls in `AspNetCore` and `Client`; both pull in `Core` and
@@ -115,7 +115,8 @@ public Task<UserDto> Get(int id, CancellationToken cancellationToken) => LoadUse
 
 ## Client
 
-The current source version is **3.0.0**. Before upgrading from
+The current source version is **3.0.1**, wire-compatible with 3.0.0 and including
+[client hot-path allocation improvements](docs/client-performance.md). Before upgrading from
 1.0.0, read the [migration guide](docs/migration-2.0.md) and
 [changelog](CHANGELOG.md). Source version does not imply NuGet publication.
 If this source patch has not been published yet, use the locally built packages

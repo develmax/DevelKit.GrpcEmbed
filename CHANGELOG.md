@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 3.0.1 — 2026-10-12
+
+- Reduce client routed-call allocations by binding route prefixes and arguments
+  once per method/contract snapshot, reusing prepared contracts, consolidating
+  metadata copying, and compiling request factories during proxy initialization.
+- Preserve wire compatibility, contract guards, cancellation, refresh/retry and
+  URI escaping; see [client performance](docs/client-performance.md).
+
 ## 3.0.0 — 2026-10-12
 
 - Fix standard Protobuf interoperability for GUID, decimal, DateTime and TimeSpan
