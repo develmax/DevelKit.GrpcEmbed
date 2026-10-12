@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>3.0.2</Version>
+    <Version>3.1.0</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Avoid per-call contract timeout timers for warmed snapshots, while bounding actual fetches, semaphore waits and refreshes by the original RPC deadline. Reuse cached MVC parameter metadata and skip unused resource-filter contexts. Preserve 3.0.x wire compatibility, authorization, MVC filters, hash validation and cancellation. See CHANGELOG.md and docs/client-performance.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Opt-in typed request/response audit integration for runtime clients and MVC endpoints. Reuse actual decoded DTOs with the application's existing masking policy, without consuming binary streams or trailers. Preserve 3.0.x wire compatibility, authorization, filters, cancellation and contract validation. See CHANGELOG.md and docs/client-performance.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

@@ -57,6 +57,8 @@ public static class GrpcEmbedConfiguredClientsExtensions
                     Contract = contract,
                     RequireHttp2ForContract = allowUnencryptedHttp2 && contract.Address.Scheme == Uri.UriSchemeHttp,
                     Routing = routing,
+                    CaptureAuditPayloads = section.GetValue<bool?>("Grpc:CaptureAuditPayloads")
+                        ?? configuration.GetValue<bool>("GrpcEmbed:Clients:CaptureAuditPayloads"),
                     DefaultTimeout = http.Timeout == Timeout.InfiniteTimeSpan ? null : http.Timeout,
                 };
                 return options;

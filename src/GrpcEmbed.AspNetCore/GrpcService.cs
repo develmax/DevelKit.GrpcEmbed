@@ -29,6 +29,12 @@ internal sealed class GrpcEmbedService
     {
         var http = call.GetHttpContext();
         http.GetEndpoint()?.Metadata.GetMetadata<GrpcEmbedRouteMetadata>()?.Validate(http, request);
+        if (http.Items.TryGetValue(GrpcEmbedPayloadAuditContract.RequestObserverKey, out var observer) && observer is Action<object?, string?> audit)
+        {
+            var contract = http.GetEndpoint()?.Metadata.GetMetadata<GrpcEmbedPayloadAuditContract>()
+                ?? throw new InvalidOperationException("The endpoint has no payload audit contract.");
+            audit(contract.ProjectRequestBody(request), contract.HttpMethod);
+        }
         // Queue metadata without starting the response. MVC actions, filters, and OnStarting
         // callbacks must still be able to add headers before Grpc.AspNetCore writes the result.
         if (_options.Contract.Enabled && _options.Contract.Hash.Enabled && _options.Contract.Hash.SendInResponses)
@@ -74,6 +80,8 @@ internal sealed class GrpcEmbedService
                 raw = exceptionContext.Result;
             }
             raw = UnwrapActionResult(raw, _options);
+            if (http.Items.ContainsKey(GrpcEmbedPayloadAuditContract.CaptureResponseKey))
+                http.Items[GrpcEmbedPayloadAuditContract.ResponseKey] = raw;
             if (typeof(TResponse) == typeof(GrpcEmbedEmpty))
             {
                 if (raw is not null)
@@ -260,7 +268,14 @@ internal sealed class GrpcEmbedMethodProvider : IServiceMethodProvider<GrpcEmbed
         where TRequest : class where TResponse : class
     {
         var method = new Method<TRequest, TResponse>(MethodType.Unary, "GrpcEmbed." + runtime.ServiceName, runtime.MethodName, Marshaller<TRequest>(), Marshaller<TResponse>());
-        var metadata = runtime.Action.EndpointMetadata.Where(x => x is not Microsoft.AspNetCore.Routing.IHttpMethodMetadata).ToArray();
+        var bodyParameter = runtime.Action.Parameters.OfType<ControllerParameterDescriptor>()
+            .SingleOrDefault(p => p.BindingInfo?.BindingSource?.Id == "Body");
+        var bodyIndex = bodyParameter is null ? -1 : Array.FindIndex(runtime.Parameters.ToArray(), p => p == bodyParameter.ParameterInfo);
+        var verb = SchemaManifestManager.GetRoute(runtime).HttpMethods.FirstOrDefault();
+        var auditContract = new GrpcEmbedPayloadAuditContract(
+            value => bodyIndex < 0 ? null : runtime.RequestReaders[bodyIndex](value), verb);
+        var metadata = runtime.Action.EndpointMetadata.Where(x => x is not Microsoft.AspNetCore.Routing.IHttpMethodMetadata)
+            .Append(auditContract).ToArray();
         context.AddUnaryMethod(method, metadata, (service, request, call) => service.Invoke<TRequest, TResponse>(runtime, request, call));
     }
 
