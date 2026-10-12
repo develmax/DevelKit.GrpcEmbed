@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 3.1.1 — 2026-10-12
+
+- Resolve operations without per-call LINQ candidate arrays when the client discovers the service automatically. Preserve model-shape validation, ambiguous-operation errors and refreshed contract snapshots.
+- Reuse the configured server authority when constructing routed RPC URLs. A named HTTP client's base address does not override that authority; route validation remains unchanged.
+- Add regression coverage for warmed resolution allocations, contract refresh, ambiguous methods and configured routing authority.
+- Preserve 3.0.x wire format, contract hashes, authorization, audit hooks and cancellation. These changes reduce client overhead; they do not guarantee lower latency for every workload.
+
 ## 3.1.0 — 2026-10-12
 
 - Add opt-in `CaptureAuditPayloads` integration for runtime clients. Application audit adapters can observe the logical request body and actual decoded response DTO, with final status, failure and resource-release callbacks.

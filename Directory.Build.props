@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>3.1.0</Version>
+    <Version>3.1.1</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Opt-in typed request/response audit integration for runtime clients and MVC endpoints. Reuse actual decoded DTOs with the application's existing masking policy, without consuming binary streams or trailers. Preserve 3.0.x wire compatibility, authorization, filters, cancellation and contract validation. See CHANGELOG.md and docs/client-performance.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Reduce warmed automatic contract-resolution allocations and reuse the configured authority when constructing routed RPC URLs. Preserve ambiguity and model-shape checks, contract refresh, 3.0.x wire compatibility, authorization, audit hooks and cancellation. See CHANGELOG.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
