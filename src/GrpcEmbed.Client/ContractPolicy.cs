@@ -20,7 +20,7 @@ public sealed class GrpcEmbedClientContractOptions
 internal sealed class ClientContractState
 {
     internal sealed record PreparedContract(string Hash, string Service, ClientRoute? Route);
-    private sealed record Operation(string Request, string Response, ClientRoute? Route);
+    private sealed record Operation(string Request, string Response, PreparedContract Prepared);
     private sealed record Snapshot(string Hash, Dictionary<string, Operation> Operations, DateTime Loaded);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly GrpcEmbedClientOptions _options;
@@ -50,7 +50,7 @@ internal sealed class ClientContractState
             throw new InvalidOperationException("RefreshAndRetry requires SendHash.");
     }
 
-    public async Task<PreparedContract?> PrepareAsync(string? service, string method, string requestShape, string responseShape, CancellationToken token)
+    public async ValueTask<PreparedContract?> PrepareAsync(string? service, string method, string requestShape, string responseShape, CancellationToken token)
     {
         if (_options.Contract.Fetch == GrpcEmbedContractFetch.Never) return null;
         var snapshot = await LoadAsync(false, null, token).ConfigureAwait(false);
@@ -70,23 +70,25 @@ internal sealed class ClientContractState
         if (operation.Request != requestShape || operation.Response != responseShape)
             throw new RpcException(new Status(StatusCode.FailedPrecondition,
                 $"Local models do not match the contract for {key}; the operation was not sent."));
-        return new PreparedContract(snapshot.Hash, service, operation.Route);
+        return operation.Prepared;
     }
 
     public async Task PreloadAsync(CancellationToken token) => _ = await LoadAsync(false, null, token).ConfigureAwait(false);
     public async Task RefreshAsync(string? previousHash, CancellationToken token)
         => _ = await LoadAsync(true, previousHash, token).ConfigureAwait(false);
 
-    private async Task<Snapshot> LoadAsync(bool force, string? previousHash, CancellationToken token)
+    private static bool Fresh(Snapshot? value, bool force, string? previousHash, TimeSpan? interval) => value is not null &&
+        (force ? value.Hash != previousHash : interval is null || DateTime.UtcNow - value.Loaded < interval.Value);
+
+    private async ValueTask<Snapshot> LoadAsync(bool force, string? previousHash, CancellationToken token)
     {
-        bool Fresh(Snapshot? value) => value is not null &&
-            (force ? value.Hash != previousHash :
-                _options.Contract.RefreshInterval is not { } interval || DateTime.UtcNow - value.Loaded < interval);
-        if (Fresh(_snapshot)) return _snapshot!;
+        var current = _snapshot;
+        if (Fresh(current, force, previousHash, _options.Contract.RefreshInterval)) return current!;
         await _gate.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            if (Fresh(_snapshot)) return _snapshot!;
+            current = _snapshot;
+            if (Fresh(current, force, previousHash, _options.Contract.RefreshInterval)) return current!;
             var address = _options.Contract.Address ?? new Uri(_options.Address, "/_grpcembed/schema.json");
             using var request = new HttpRequestMessage(HttpMethod.Get, address)
             {
@@ -123,7 +125,8 @@ internal sealed class ClientContractState
                 operations.Add("GrpcEmbed." + service.Name + "/" + method.Name, new Operation(
                     method.Value.GetProperty("requestShapeHash").GetString() ?? "",
                     method.Value.GetProperty("responseShapeHash").GetString() ?? "",
-                    method.Value.TryGetProperty("route", out var route) && route.ValueKind == JsonValueKind.Object ? ClientRoute.Parse(route) : null));
+                    new PreparedContract(hash, "GrpcEmbed." + service.Name,
+                        method.Value.TryGetProperty("route", out var route) && route.ValueKind == JsonValueKind.Object ? ClientRoute.Parse(route) : null)));
             return _snapshot = new Snapshot(hash, operations, DateTime.UtcNow);
         }
         finally { _gate.Release(); }

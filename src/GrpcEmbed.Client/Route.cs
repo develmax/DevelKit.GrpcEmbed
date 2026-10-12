@@ -55,6 +55,94 @@ internal sealed class ClientRoute
 
     private static string Name(string token) => token.TrimStart('*').Split(':', '=', '?')[0];
 
+    // Bind configuration, route-prefix inference and parameter names once. Only
+    // argument values and their escaping belong on the per-RPC hot path.
+    public static Func<object?[], string> Bind(GrpcEmbedClientOptions options, ClientRoute? route,
+        string service, string method, ParameterInfo[] parameters)
+    {
+        if (options.Routing.Mode != GrpcEmbedRoutingMode.Rest)
+        {
+            var path = Build(options, route, service, method, parameters, Array.Empty<object?>());
+            return _ => path;
+        }
+        return (route ?? throw new InvalidOperationException("The contract does not publish a REST route."))
+            .BindRest(options, parameters);
+    }
+
+    private Func<object?[], string> BindRest(GrpcEmbedClientOptions options, ParameterInfo[] parameters)
+    {
+        var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in options.Routing.Values) values[pair.Key] = pair.Value;
+        var mount = options.Routing.PathBase;
+        if (mount is null)
+        {
+            var baseSegments = options.Address.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            mount = options.Address.AbsolutePath.TrimEnd('/');
+            for (var start = 0; start < baseSegments.Length; start++)
+            {
+                var count = baseSegments.Length - start;
+                if (count > _segments.Length) continue;
+                var matches = Enumerable.Range(0, count).Select(i => _prefixes[i].Match(Uri.UnescapeDataString(baseSegments[start + i]))).ToArray();
+                if (matches.Any(match => !match.Success)) continue;
+                mount = string.Join("/", baseSegments.Take(start));
+                for (var i = 0; i < count; i++)
+                {
+                    var group = 1;
+                    foreach (Match token in Tokens.Matches(_segments[i]))
+                    {
+                        var name = Name(token.Groups[1].Value);
+                        if (!values.ContainsKey(name)) values[name] = matches[i].Groups[group].Value;
+                        group++;
+                    }
+                }
+                break;
+            }
+        }
+        var arguments = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            var name = parameters[i].Name!;
+            arguments[_parameters.FirstOrDefault(pair => pair.Value == name).Key ?? name] = i;
+        }
+        var bindings = Tokens.Matches(_template).Cast<Match>().Select(token =>
+        {
+            var spec = token.Groups[1].Value;
+            var name = Name(spec);
+            values.TryGetValue(name, out var configured);
+            var fallback = spec.Contains('=') ? spec[(spec.IndexOf('=') + 1)..].TrimEnd('?') : null;
+            return (token.Index, token.Length, Name: name, Argument: arguments.TryGetValue(name, out var index) ? index : -1,
+                Configured: configured, Fallback: fallback, Optional: spec.EndsWith('?'), CatchAll: spec.StartsWith("**", StringComparison.Ordinal));
+        }).ToArray();
+        var prefix = "/" + (mount.Trim('/').Length == 0 ? "" : mount.Trim('/') + "/");
+        return args =>
+        {
+            var path = new System.Text.StringBuilder(_template.Length + 32);
+            var position = 0;
+            foreach (var binding in bindings)
+            {
+                path.Append(_template, position, binding.Index - position);
+                var value = binding.Argument >= 0 ? Convert.ToString(args[binding.Argument], CultureInfo.InvariantCulture) : binding.Configured;
+                // Convert.ToString(null) returns empty, while a null route value
+                // must still select the default/optional/missing-value behavior.
+                if (binding.Argument >= 0 && args[binding.Argument] is null) value = null;
+                value ??= binding.Fallback;
+                if (value is null && !binding.Optional)
+                    throw new InvalidOperationException($"No value for route parameter '{binding.Name}'. Configure Grpc:Routing:Values:{binding.Name}.");
+                if (value is not null)
+                {
+                    if (value is "." or ".." || value.Contains('/') && value.Split('/').Any(segment => segment is "." or ".."))
+                        throw new InvalidOperationException("Dot path segments are not supported.");
+                    path.Append(binding.CatchAll ? string.Join("/", value.Split('/').Select(Uri.EscapeDataString)) : Uri.EscapeDataString(value));
+                }
+                position = binding.Index + binding.Length;
+            }
+            path.Append(_template, position, _template.Length - position);
+            var result = path.ToString().Trim('/');
+            if (result.Contains('{') || result.Contains('}')) throw new NotSupportedException("Unsupported route template.");
+            return prefix + result;
+        };
+    }
+
     public static string Build(GrpcEmbedClientOptions options, ClientRoute? route, string service, string method, ParameterInfo[] parameters, object?[] args)
     {
         if (options.Routing.Mode == GrpcEmbedRoutingMode.Rest)
