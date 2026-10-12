@@ -56,13 +56,29 @@ internal sealed class ClientContractState
         var snapshot = await LoadAsync(false, null, token, deadline).ConfigureAwait(false);
         if (service is null)
         {
-            var named = snapshot.Operations.Where(item => item.Key.EndsWith("/" + method, StringComparison.Ordinal)).ToArray();
-            var matching = named.Where(item => item.Value.Request == requestShape && item.Value.Response == responseShape).ToArray();
-            var selected = named.Length == 1 ? named : matching;
-            if (selected.Length != 1)
+            // Compute the suffix once, not once per published operation. Avoid
+            // materializing candidate arrays on the warmed-up RPC path.
+            var suffix = "/" + method;
+            Operation? named = null, matching = null;
+            var namedCount = 0;
+            var matchingCount = 0;
+            foreach (var item in snapshot.Operations)
+            {
+                if (!item.Key.EndsWith(suffix, StringComparison.Ordinal)) continue;
+                named = item.Value;
+                namedCount++;
+                if (item.Value.Request != requestShape || item.Value.Response != responseShape) continue;
+                matching = item.Value;
+                matchingCount++;
+            }
+            var selected = namedCount == 1 ? named : matchingCount == 1 ? matching : null;
+            if (selected is null)
                 throw new RpcException(new Status(StatusCode.FailedPrecondition,
                     $"Cannot unambiguously resolve {method} in the server contract; configure Grpc.ServiceName."));
-            service = selected[0].Key[..selected[0].Key.LastIndexOf('/')];
+            if (selected.Request != requestShape || selected.Response != responseShape)
+                throw new RpcException(new Status(StatusCode.FailedPrecondition,
+                    $"Local models do not match the contract for {selected.Prepared.Service}/{method}; the operation was not sent."));
+            return selected.Prepared;
         }
         var key = service + "/" + method;
         if (!snapshot.Operations.TryGetValue(key, out var operation))
