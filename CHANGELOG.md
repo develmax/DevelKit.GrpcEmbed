@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Reduce client routed-call allocations by binding route prefixes and arguments
+  once per method/contract snapshot, reusing prepared contracts, consolidating
+  metadata copying, and compiling request factories during proxy initialization.
+- Preserve wire compatibility, contract guards, cancellation, refresh/retry and
+  URI escaping; see [client performance](docs/client-performance.md).
+
 All notable changes to this project are documented in this file.
 
 ## Unreleased
