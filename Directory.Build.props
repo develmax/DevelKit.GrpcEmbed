@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>3.0.0</Version>
+    <Version>3.0.1</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Breaking wire-format correction: standard Protobuf GUID, decimal, Timestamp and Duration encoding; valid nullable collection schemas and reflection descriptors. New contract and model-shape fingerprints reject legacy serializers. Upgrade clients and servers together. See CHANGELOG.md and docs/wire-format-migration.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Reduce routed-client allocations by binding routes once, reusing prepared contracts, consolidating metadata and compiling request factories at startup. Preserve 3.0.0 wire compatibility, hash validation, refresh/retry, cancellation and URI escaping. See CHANGELOG.md and docs/client-performance.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
