@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 3.0.2 — 2026-10-12
+
+- Allocate a contract timeout timer only for actual contract loading/refresh and
+  semaphore waits, not every warmed RPC. Preserve the original end-to-end deadline
+  across contract I/O, calls and guarded retries; cancel underlying fetch I/O on timeout.
+- Reuse cached MVC parameter metadata instead of reflecting argument arrays on
+  each invocation. Avoid creating resource-filter contexts for unrelated filters
+  or when no resource filters apply. Authorization and action/result filters remain active.
+- Add regression tests for cold-fetch cancellation and expired refresh deadlines.
+- Preserve 3.0.x wire format and contract fingerprints. These are overhead reductions,
+  not a guarantee of lower database/network latency or universally better p99.
+
 ## 3.0.1 — 2026-10-12
 
 - Reduce client routed-call allocations by binding route prefixes and arguments

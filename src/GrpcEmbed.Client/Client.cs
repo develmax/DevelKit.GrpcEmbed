@@ -240,17 +240,14 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
     {
         var request = requestFactory(args);
         var cancellation = contractCancellation(parameterCount, args);
-        using var timeoutSource = _options.Contract.Fetch == GrpcEmbedContractFetch.Never || _options.DefaultTimeout is null
-            ? null : CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        if (timeoutSource is not null && _options.DefaultTimeout is { } limit) timeoutSource.CancelAfter(limit);
-        var token = timeoutSource?.Token ?? cancellation;
+        var token = cancellation;
         var deadline = _options.DefaultTimeout is { } timeout ? DateTime.UtcNow + timeout : (DateTime?)null;
         for (var attempt = 0; ; attempt++)
         {
         token.ThrowIfCancellationRequested();
         var prepared = _options.Contract.Fetch == GrpcEmbedContractFetch.Never ? null :
             await _contractState.PrepareAsync(contractService, method.Name,
-                ContractShapeCache<TRequest>.Hash, ContractShapeCache<TWireResponse>.Hash, token).ConfigureAwait(false);
+                ContractShapeCache<TRequest>.Hash, ContractShapeCache<TWireResponse>.Hash, token, deadline).ConfigureAwait(false);
         var hash = prepared?.Hash;
         var activeMethod = prepared is not null && prepared.Service != method.ServiceName
             ? ResolvedContractMethods<TRequest, TWireResponse>.Get(method, prepared.Service) : method;
@@ -292,7 +289,7 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
             error.Trailers.GetValue(GrpcEmbedContractHeaders.Rejection) == GrpcEmbedContractHeaders.NotExecuted &&
             error.Trailers.GetValue(GrpcEmbedContractHeaders.ServerHash) is { Length: 64 })
         {
-            await _contractState.RefreshAsync(hash, token).ConfigureAwait(false);
+            await _contractState.RefreshAsync(hash, token, deadline).ConfigureAwait(false);
         }
         }
     }

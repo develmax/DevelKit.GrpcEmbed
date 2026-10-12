@@ -20,10 +20,19 @@ interval checks still apply. Contract hash guards and pre-execution rejection
 remain enabled according to configuration; performance does not require turning
 them off. Metadata is copied once without modifying a caller-owned collection.
 
-Only calls needing a contract-fetch deadline create a linked cancellation source.
+Since 3.0.2, only actual contract fetches, refreshes or their semaphore waits create
+a linked cancellation source. A warmed RPC does not allocate a contract timeout
+timer; the gRPC deadline still bounds the RPC. The original absolute deadline is
+also passed to contract loading and guarded refresh, so a retry cannot reset the
+end-to-end timeout budget.
 Caller cancellation and gRPC deadlines remain propagated. Request constructors
 are compiled during proxy initialization rather than lazily switching a shared
 static factory between client instances.
+
+On the server, action arguments use the parameter metadata cached during startup.
+Resource-filter contexts are created only when resource filters participate.
+Authorization and MVC action/result-filter behavior are unchanged; these changes
+do not bypass access controls, validation or audit logging.
 
 These changes reduce routing overhead, not database or network latency. Measure
 the same operations and payloads, warm up contract fetching separately, compare
