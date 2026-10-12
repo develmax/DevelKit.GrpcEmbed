@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 3.1.0 — 2026-10-12
+
+- Add opt-in `CaptureAuditPayloads` integration for runtime clients. Application audit adapters can observe the logical request body and actual decoded response DTO, with final status, failure and resource-release callbacks.
+- Add MVC endpoint audit hooks for decoded request bodies after contract validation and unwrapped response DTOs after MVC filters. Integrations do not consume or replace Protobuf streams or trailers.
+- Use published body-binding metadata for REST-compatible request projections. Applications retain responsibility for JSON settings, masking, body limits and audit sinks.
+- Preserve 3.0.x wire format and contract hashes. Capture is disabled by default and performs no automatic logging. A callback failure after a completed RPC cannot trigger a contract-mismatch retry.
+- Add regression coverage for typed payloads, concurrent-call isolation, callback cleanup and unchanged RPC status.
+
 ## 3.0.2 — 2026-10-12
 
 - Allocate a contract timeout timer only for actual contract loading/refresh and

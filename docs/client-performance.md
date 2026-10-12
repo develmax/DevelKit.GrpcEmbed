@@ -1,5 +1,20 @@
 # Client hot-path performance
 
+## Comparable payload auditing
+
+GrpcEmbed 3.1.0 supports opt-in integration with an application's existing audit and masking pipeline:
+
+- Set `GrpcEmbed:Clients:CaptureAuditPayloads: true` (or a client's `Grpc:CaptureAuditPayloads`) for configured runtime clients; direct registrations use `GrpcEmbedClientOptions.CaptureAuditPayloads`.
+- An HTTP audit adapter can read `GrpcEmbedClientPayloadAudit.Current`, serialize its logical request body using the application's JSON contract, and register completion/failure/release callbacks. Completion receives the actual decoded response DTO after final gRPC status verification, not a second Protobuf decode.
+- Server audit middleware can install an `Action<object?, string?>` under `GrpcEmbedPayloadAuditContract.RequestObserverKey` and set `CaptureResponseKey` in `HttpContext.Items`. The request callback runs after contract validation and decoding; `ResponseKey` holds the unwrapped DTO after MVC filters. Rejected calls may have no decoded body. Remove per-request hooks when releasing resources.
+- Keep the same masking rules, body limits and sinks as REST. Never persist raw DTOs, binary frames, tokens or callback exceptions without applying the application's privacy policy. Capture itself performs no logging.
+
+Do not compare a fully redacted gRPC marker against REST's field-level JSON audit and describe the result as transport-only performance. An application comparison must execute equivalent serialization, masking and logging on both sides. JSON projection for gRPC auditing is part of its measured cost; database/cache work, HTTP version, warmup, concurrency and resources must also remain comparable.
+
+The carrier and captured server DTOs are transient memory, not a persistent audit store. Callbacks run inline, not in the background. An audit failure must not replay an already-executed business call. For canonical body projection, fetch the server contract: native calls without a fetched contract expose the transport request envelope instead.
+
+## Transport hot path
+
 GrpcEmbed clients reuse their DI registrations, proxies, call invokers and gRPC
 channels. They do not construct a service provider or channel for every RPC.
 

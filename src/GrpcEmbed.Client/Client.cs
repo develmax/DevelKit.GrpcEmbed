@@ -11,6 +11,8 @@ namespace GrpcEmbed.Client;
 
 public sealed class GrpcEmbedClientOptions
 {
+    /// <summary>Expose decoded per-call bodies to a custom HTTP audit adapter. No payloads are logged automatically.</summary>
+    public bool CaptureAuditPayloads { get; set; }
     public GrpcEmbedClientRoutingOptions Routing { get; set; } = new();
     public GrpcEmbedClientContractOptions Contract { get; set; } = new();
     internal bool RequireHttp2ForContract { get; set; }
@@ -212,6 +214,7 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
         }
         var returnsValueTask = contract.ReturnType.IsGenericType && contract.ReturnType.GetGenericTypeDefinition() == typeof(ValueTask<>);
         var requestFactory = ClientRequestFactories<TRequest>.Build(parameters);
+        if (_options.CaptureAuditPayloads) ClientAuditBody<TRequest>.Initialize();
         var contractService = _options.ServiceName is null && serviceAttribute is null && _options.OperationResolver is null
             ? null : method.ServiceName;
         BoundRoute? boundRoute = null;
@@ -269,7 +272,11 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
             if (_options.Contract.SendHash) guarded.Add(GrpcEmbedContractHeaders.RequestHash, hash!);
             metadata = guarded;
         }
+        using var audit = _options.CaptureAuditPayloads ? new GrpcEmbedClientPayloadAudit(
+            activeMethod.ServiceName + "/" + activeMethod.Name,
+            prepared is null ? request : ClientAuditBody<TRequest>.Read(request, prepared.BodyParameter), prepared?.HttpMethod) : null;
         using var call = _invoker.AsyncUnaryCall(activeMethod, null, new CallOptions(headers: metadata, deadline: deadline, cancellationToken: token), request);
+        var responseReceived = false;
         try
         {
         if (_options.ExpectedSchemaHash is not null)
@@ -280,16 +287,25 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
                 throw new RpcException(new Status(StatusCode.FailedPrecondition, $"GrpcEmbed schema hash mismatch. Expected '{_options.ExpectedSchemaHash}', received '{actual ?? "<missing>"}'."));
         }
         var response = await call.ResponseAsync.ConfigureAwait(false);
-        if (typeof(TWireResponse) == typeof(TResponse)) return (TResponse)(object)response;
-        return ClientResponseReaders<TWireResponse, TResponse>.Read(response);
+        responseReceived = true;
+        var result = typeof(TWireResponse) == typeof(TResponse) ? (TResponse)(object)response
+            : ClientResponseReaders<TWireResponse, TResponse>.Read(response);
+        audit?.Complete(typeof(TResponse) == typeof(GrpcEmbedEmpty) ? null : result, (int)call.GetStatus().StatusCode);
+        return result;
         }
-        catch (RpcException error) when (_options.Contract.SendHash &&
+        catch (RpcException error) when (!responseReceived && _options.Contract.SendHash &&
             _options.Contract.OnMismatch == GrpcEmbedContractMismatch.RefreshAndRetry &&
             attempt < _options.Contract.MaxRetries && error.StatusCode == StatusCode.FailedPrecondition &&
             error.Trailers.GetValue(GrpcEmbedContractHeaders.Rejection) == GrpcEmbedContractHeaders.NotExecuted &&
             error.Trailers.GetValue(GrpcEmbedContractHeaders.ServerHash) is { Length: 64 })
         {
+            audit?.Fail(error);
             await _contractState.RefreshAsync(hash, token, deadline).ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            audit?.Fail(error);
+            throw;
         }
         }
     }
@@ -320,6 +336,21 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
         : type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Task<>) || type.GetGenericTypeDefinition() == typeof(ValueTask<>))
             ? type.GetGenericArguments()[0] : null;
     private static Marshaller<T> Marshaller<T>() => Marshallers.Create<T>((value, context) => { GrpcEmbedRuntimeModel.Model.Serialize(context.GetBufferWriter(), value); context.Complete(); }, context => (T)GrpcEmbedRuntimeModel.Model.Deserialize(context.PayloadAsReadOnlySequence(), typeof(T), null, null)!);
+}
+
+internal static class ClientAuditBody<TRequest> where TRequest : class
+{
+    private static readonly IReadOnlyDictionary<string, Func<TRequest, object?>> Readers = typeof(TRequest).GetProperties()
+        .ToDictionary(p => p.Name, p =>
+        {
+            var input = System.Linq.Expressions.Expression.Parameter(typeof(TRequest));
+            return System.Linq.Expressions.Expression.Lambda<Func<TRequest, object?>>(
+                System.Linq.Expressions.Expression.Convert(System.Linq.Expressions.Expression.Property(input, p), typeof(object)), input).Compile();
+        }, StringComparer.Ordinal);
+    public static void Initialize() => _ = Readers.Count;
+    public static object? Read(TRequest request, string? bodyParameter)
+        => bodyParameter is null ? null : Readers.TryGetValue(bodyParameter, out var read) ? read(request)
+            : throw new InvalidOperationException("The published audit body parameter is absent from the client contract.");
 }
 
 internal static class ClientRequestFactories<TRequest> where TRequest : class

@@ -19,7 +19,7 @@ public sealed class GrpcEmbedClientContractOptions
 
 internal sealed class ClientContractState
 {
-    internal sealed record PreparedContract(string Hash, string Service, ClientRoute? Route);
+    internal sealed record PreparedContract(string Hash, string Service, ClientRoute? Route, string? BodyParameter = null, string? HttpMethod = null);
     private sealed record Operation(string Request, string Response, PreparedContract Prepared);
     private sealed record Snapshot(string Hash, Dictionary<string, Operation> Operations, DateTime Loaded);
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -136,7 +136,12 @@ internal sealed class ClientContractState
                     method.Value.GetProperty("requestShapeHash").GetString() ?? "",
                     method.Value.GetProperty("responseShapeHash").GetString() ?? "",
                     new PreparedContract(hash, "GrpcEmbed." + service.Name,
-                        method.Value.TryGetProperty("route", out var route) && route.ValueKind == JsonValueKind.Object ? ClientRoute.Parse(route) : null)));
+                        method.Value.TryGetProperty("route", out var route) && route.ValueKind == JsonValueKind.Object ? ClientRoute.Parse(route) : null,
+                        method.Value.TryGetProperty("parameters", out var parameters) ? parameters.EnumerateArray()
+                            .Where(p => p.TryGetProperty("bindingSource", out var binding) && binding.GetString() == "Body")
+                            .Select(p => p.GetProperty("name").GetString()).SingleOrDefault() : null,
+                        route.ValueKind == JsonValueKind.Object && route.TryGetProperty("httpMethods", out var verbs)
+                            ? verbs.EnumerateArray().Select(x => x.GetString()).FirstOrDefault() : null)));
             return _snapshot = new Snapshot(hash, operations, DateTime.UtcNow);
         }
         finally { _gate.Release(); }
