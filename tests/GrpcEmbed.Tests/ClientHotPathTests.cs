@@ -66,6 +66,44 @@ public sealed class ClientHotPathTests
 
     private static void Arguments(string? key) { }
 
+    [Fact]
+    public async Task Cold_contract_fetch_observes_call_deadline_and_cancels_underlying_io()
+    {
+        var handler = new DelayedManifestHandler();
+        using var http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+        var options = new GrpcEmbedClientOptions { Address = new Uri("http://localhost"), HttpClient = http };
+        options.Contract.Fetch = GrpcEmbedContractFetch.FirstCall;
+        var state = new ClientContractState(options);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await state.PrepareAsync("GrpcEmbed.Client", "Get", "rq", "rs", default, DateTime.UtcNow.AddMilliseconds(100)));
+        Assert.True(handler.Cancelled);
+    }
+
+    [Fact]
+    public async Task Expired_refresh_deadline_keeps_snapshot_and_does_not_start_new_io()
+    {
+        var handler = new ManifestHandler();
+        using var http = new HttpClient(handler);
+        var options = new GrpcEmbedClientOptions { Address = new Uri("http://localhost"), HttpClient = http };
+        options.Contract.Fetch = GrpcEmbedContractFetch.FirstCall;
+        var state = new ClientContractState(options);
+        var first = await state.PrepareAsync("GrpcEmbed.Client", "Get", "rq", "rs", default);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => state.RefreshAsync(first!.Hash, default, DateTime.UtcNow.AddSeconds(-1)));
+        Assert.Equal(1, handler.Calls);
+        Assert.Same(first, await state.PrepareAsync("GrpcEmbed.Client", "Get", "rq", "rs", default));
+    }
+
+    private sealed class DelayedManifestHandler : HttpMessageHandler
+    {
+        public bool Cancelled;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            try { await Task.Delay(Timeout.Infinite, token); }
+            catch (OperationCanceledException) { Cancelled = token.IsCancellationRequested; throw; }
+            throw new InvalidOperationException("Unexpected completion");
+        }
+    }
+
     private sealed class ManifestHandler : HttpMessageHandler
     {
         public int Calls { get; private set; }

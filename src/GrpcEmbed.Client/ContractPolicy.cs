@@ -50,10 +50,10 @@ internal sealed class ClientContractState
             throw new InvalidOperationException("RefreshAndRetry requires SendHash.");
     }
 
-    public async ValueTask<PreparedContract?> PrepareAsync(string? service, string method, string requestShape, string responseShape, CancellationToken token)
+    public async ValueTask<PreparedContract?> PrepareAsync(string? service, string method, string requestShape, string responseShape, CancellationToken token, DateTime? deadline = null)
     {
         if (_options.Contract.Fetch == GrpcEmbedContractFetch.Never) return null;
-        var snapshot = await LoadAsync(false, null, token).ConfigureAwait(false);
+        var snapshot = await LoadAsync(false, null, token, deadline).ConfigureAwait(false);
         if (service is null)
         {
             var named = snapshot.Operations.Where(item => item.Key.EndsWith("/" + method, StringComparison.Ordinal)).ToArray();
@@ -74,16 +74,26 @@ internal sealed class ClientContractState
     }
 
     public async Task PreloadAsync(CancellationToken token) => _ = await LoadAsync(false, null, token).ConfigureAwait(false);
-    public async Task RefreshAsync(string? previousHash, CancellationToken token)
-        => _ = await LoadAsync(true, previousHash, token).ConfigureAwait(false);
+    public async Task RefreshAsync(string? previousHash, CancellationToken token, DateTime? deadline = null)
+        => _ = await LoadAsync(true, previousHash, token, deadline).ConfigureAwait(false);
 
     private static bool Fresh(Snapshot? value, bool force, string? previousHash, TimeSpan? interval) => value is not null &&
         (force ? value.Hash != previousHash : interval is null || DateTime.UtcNow - value.Loaded < interval.Value);
 
-    private async ValueTask<Snapshot> LoadAsync(bool force, string? previousHash, CancellationToken token)
+    private async ValueTask<Snapshot> LoadAsync(bool force, string? previousHash, CancellationToken token, DateTime? deadline = null)
     {
         var current = _snapshot;
         if (Fresh(current, force, previousHash, _options.Contract.RefreshInterval)) return current!;
+        // A warmed snapshot needs no timer. Bound only actual contract I/O and gate waits
+        // by the original call deadline; refresh/retry must not reset that budget.
+        using var timeout = deadline is null ? null : CancellationTokenSource.CreateLinkedTokenSource(token);
+        if (timeout is not null)
+        {
+            var remaining = deadline!.Value - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero) throw new OperationCanceledException("The call deadline elapsed before contract loading.", token);
+            timeout.CancelAfter(remaining);
+            token = timeout.Token;
+        }
         await _gate.WaitAsync(token).ConfigureAwait(false);
         try
         {

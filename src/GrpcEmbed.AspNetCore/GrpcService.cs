@@ -101,6 +101,8 @@ internal sealed class GrpcEmbedService
             if (authorization.Result is not null) break;
         }
         if (authorization.Result is not null) return await InvokeActionAndResultFilters(method, controller, actionContext, filters, arguments, authorization.Result);
+        if (!filters.Any(filter => filter is IResourceFilter or IAsyncResourceFilter))
+            return await InvokeActionAndResultFilters(method, controller, actionContext, filters, arguments);
 
         async Task<ResourceExecutedContext> Next(int index)
         {
@@ -109,6 +111,7 @@ internal sealed class GrpcEmbedService
                 var result = await InvokeActionAndResultFilters(method, controller, actionContext, filters, arguments);
                 return new ResourceExecutedContext(actionContext, filterList) { Result = result as IActionResult ?? new ObjectResult(result) };
             }
+            if (filters[index] is not IResourceFilter && filters[index] is not IAsyncResourceFilter) return await Next(index + 1);
             var executing = new ResourceExecutingContext(actionContext, filterList, new List<Microsoft.AspNetCore.Mvc.ModelBinding.IValueProviderFactory>());
             if (filters[index] is IAsyncResourceFilter asyncFilter)
             {
@@ -131,13 +134,14 @@ internal sealed class GrpcEmbedService
 
     private static async Task<object?> InvokeActionAndResultFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, object?[] arguments, IActionResult? shortCircuit = null)
     {
-        var dictionary = method.Action.MethodInfo.GetParameters().Select((p, i) => (p.Name!, arguments[i])).ToDictionary(x => x.Item1, x => x.Item2);
+        var dictionary = new Dictionary<string, object?>(method.Arguments.Length, StringComparer.Ordinal);
+        for (var i = 0; i < method.Arguments.Length; i++) dictionary.Add(method.Arguments[i].Parameter.Name!, arguments[i]);
         var executing = new ActionExecutingContext(actionContext, filters.ToList(), dictionary, controller);
         async Task<ActionExecutedContext> Next(int index)
         {
             if (index == filters.Length)
             {
-                for (var i = 0; i < arguments.Length; i++) arguments[i] = dictionary[method.Action.MethodInfo.GetParameters()[i].Name!];
+                for (var i = 0; i < arguments.Length; i++) arguments[i] = dictionary[method.Arguments[i].Parameter.Name!];
                 var value = await AwaitResult(method.Invoke(controller, arguments), method.Action.MethodInfo.ReturnType);
                 return new ActionExecutedContext(actionContext, filters.ToList(), controller) { Result = value as IActionResult ?? new ObjectResult(value) };
             }
