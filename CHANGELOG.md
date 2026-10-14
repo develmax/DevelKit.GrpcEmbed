@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.0.2 — 2026-10-14
+
+- Measure stable scalar request envelopes before writing, allowing Grpc.Net.Client to use its pooled frame buffer without an intermediate growing buffer and copy. Complex DTO and collection arguments retain the existing serialization path.
+- Skip unrelated MVC filter categories in-place rather than creating recursive async frames. Preserve applicable authorization, resource, action and result filters and their order.
+- Add payload-byte/length and mixed-category filter-order regressions. The 4.0.x wire format, descriptors and contract fingerprints are unchanged; no Protobuf regeneration is needed.
+
 ## 4.0.1 — 2026-10-14
 
 - Fix serializer-construction stack overflow for direct and mutually recursive collection DTOs. Use a public serializer provider with deferred wire serializer resolution instead of eagerly rebuilding a surrogate chain. Preserve the 4.0.0 wire profile, descriptors and contract fingerprints.

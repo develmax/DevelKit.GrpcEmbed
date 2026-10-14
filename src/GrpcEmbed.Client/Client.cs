@@ -207,7 +207,8 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
             service = operation.Service;
             methodName = operation.Method;
         }
-        var method = new Method<TRequest, TWireResponse>(MethodType.Unary, "GrpcEmbed." + service, methodName, Marshaller<TRequest>(), Marshaller<TWireResponse>());
+        var measureRequest = parameters.All(p => RequestSerialization.IsScalar(p.ParameterType));
+        var method = new Method<TRequest, TWireResponse>(MethodType.Unary, "GrpcEmbed." + service, methodName, Marshaller<TRequest>(measureRequest), Marshaller<TWireResponse>());
         if (_options.Contract.Fetch != GrpcEmbedContractFetch.Never)
         {
             _ = ContractShapeCache<TRequest>.Hash;
@@ -341,7 +342,7 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
         ? typeof(GrpcEmbedEmpty)
         : type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Task<>) || type.GetGenericTypeDefinition() == typeof(ValueTask<>))
             ? type.GetGenericArguments()[0] : null;
-    private static Marshaller<T> Marshaller<T>() => Marshallers.Create<T>((value, context) => { GrpcEmbedRuntimeModel.Model.Serialize(context.GetBufferWriter(), value); context.Complete(); }, context => (T)GrpcEmbedRuntimeModel.Model.Deserialize(context.PayloadAsReadOnlySequence(), typeof(T), null, null)!);
+    private static Marshaller<T> Marshaller<T>(bool measureRequest = false) => Marshallers.Create<T>((value, context) => RequestSerialization.Write(value, context, measureRequest), context => (T)GrpcEmbedRuntimeModel.Model.Deserialize(context.PayloadAsReadOnlySequence(), typeof(T), null, null)!);
 }
 
 internal static class ClientAuditBody<TRequest> where TRequest : class
