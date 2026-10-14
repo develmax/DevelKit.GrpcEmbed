@@ -23,7 +23,25 @@ public static class GrpcEmbedRuntimeModel
 
     public static void Configure(params Type[] rootTypes)
     {
+        Validate(rootTypes);
         lock (Gate) foreach (var type in rootTypes) ConfigureCore(type);
+    }
+
+    /// <summary>Reject unsupported shapes before registering or exporting a partial wire model.</summary>
+    public static void Validate(params Type[] rootTypes)
+    {
+        var seen = new HashSet<Type>();
+        void Visit(Type declared)
+        {
+            var type = Nullable.GetUnderlyingType(declared) ?? declared;
+            if (!seen.Add(type) || IsBuiltIn(type) || type.IsEnum) return;
+            if (typeof(System.Collections.IDictionary).IsAssignableFrom(type) || type.GetInterfaces().Append(type).Any(t =>
+                t.IsGenericType && (t.GetGenericTypeDefinition() == typeof(IDictionary<,>) || t.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))))
+                throw new NotSupportedException($"GrpcEmbed cannot encode dictionary/map type {type}: map key/value presence has no supported exported wire contract. Use an explicit entry DTO collection or REST.");
+            if (TryElement(type, out var element)) { Visit(element!); return; }
+            foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public).Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)) Visit(property.PropertyType);
+        }
+        foreach (var root in rootTypes) Visit(root);
     }
 
     private static void ConfigureCore(Type declaredType)

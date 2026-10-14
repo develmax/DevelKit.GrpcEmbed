@@ -15,6 +15,7 @@ internal static class SchemaGenerator
 {
     public static GrpcEmbedSchema Generate(IReadOnlyList<RuntimeMethod> methods, bool computeHash = true, GrpcEmbedRoutingOptions? routing = null)
     {
+        GrpcEmbedRuntimeModel.Validate(methods.SelectMany(m => new[] { m.RequestType, m.ResponseType }).ToArray());
         var messages = new Dictionary<Type, string>();
         foreach (var method in methods)
         {

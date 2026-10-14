@@ -64,5 +64,12 @@ fields retain CLR defaults rather than application initializer defaults.
 Top-level null MVC results still follow existing error handling; this does not
 convert a missing business result into a successful empty response.
 
+Dictionary/map contracts are not supported by this exported wire profile, including
+nullable/reference map values. They are rejected before model registration and
+business execution, rather than silently losing value presence. Server discovery
+skips such actions (REST stays available), or fails startup when
+`ThrowOnUnsupportedAction` is true. Use a collection of explicit entry DTOs for
+gRPC. This restriction also applies to dictionaries nested inside DTO properties.
+
 Package publication and application deployment are separate steps. Updating
 source code alone does not change a deployed service's wire format.

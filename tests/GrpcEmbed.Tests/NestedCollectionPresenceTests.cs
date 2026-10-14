@@ -61,6 +61,22 @@ public sealed class NestedCollectionPresenceTests
         public ISet<int?>? Set { get; set; }
     }
 
+    [Theory]
+    [InlineData(typeof(Dictionary<string, int?>))]
+    [InlineData(typeof(IDictionary<string, string?>))]
+    [InlineData(typeof(IReadOnlyDictionary<string, Leaf?>))]
+    [InlineData(typeof(MapHolder))]
+    public void Maps_fail_before_model_registration_instead_of_losing_value_presence(Type type)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var error = Assert.Throws<NotSupportedException>(() => GrpcEmbedRuntimeModel.Configure(type));
+            Assert.Contains("dictionary/map", error.Message, StringComparison.Ordinal);
+        }
+    }
+
+    public sealed class MapHolder { public Dictionary<string, int?>? Values { get; set; } }
+
     private static byte[] Serialize(Holder value)
     {
         GrpcEmbedRuntimeModel.Configure(typeof(Holder));

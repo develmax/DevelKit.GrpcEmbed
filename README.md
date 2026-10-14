@@ -58,11 +58,11 @@ Choose **one** of these application-level installation commands:
 
 ```shell
 # Server and client
-dotnet add package DevelKit.GrpcEmbed --version 3.0.2
+dotnet add package DevelKit.GrpcEmbed --version 4.0.0
 # Server only
-dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 3.0.2
+dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 4.0.0
 # Client only
-dotnet add package DevelKit.GrpcEmbed.Client --version 3.0.2
+dotnet add package DevelKit.GrpcEmbed.Client --version 4.0.0
 ```
 
 The bundle pulls in `AspNetCore` and `Client`; both pull in `Core` and

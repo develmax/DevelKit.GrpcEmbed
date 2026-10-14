@@ -112,7 +112,13 @@ internal sealed class RuntimeRegistry
             var wireResponse = RuntimeResponseTypes.RequiresWrapper(response!)
                 ? RuntimeResponseTypes.GetOrCreate(service + "_" + method + "_Response", response!)
                 : response!;
-            GrpcEmbedRuntimeModel.Configure(request, wireResponse, response!);
+            try { GrpcEmbedRuntimeModel.Configure(request, wireResponse, response!); }
+            catch (NotSupportedException error)
+            {
+                if (options.ThrowOnUnsupportedAction) throw new InvalidOperationException($"GrpcEmbed cannot export {action.DisplayName}: {error.Message}", error);
+                logger.LogWarning("GrpcEmbed skipped unsupported MVC action {Action}: {Reason}", action.DisplayName, error.Message);
+                continue;
+            }
             var readers = parameters.Select(p => ActionDelegates.CompileGetter(request, p.Name!)).ToArray();
             var transportIndex = 0;
             var arguments = action.MethodInfo.GetParameters().Select(p =>

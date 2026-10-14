@@ -11,6 +11,7 @@ All notable changes to this project are documented in this file.
 - Change schema and CLR shape fingerprints so configured contract discovery/validation rejects 3.x peers before business execution. Fetch-free or validation-disabled clients still require operational version coordination.
 - Compile attributed wire surrogates once for collection-bearing DTOs using public protobuf-net APIs. DTOs without collections keep direct serialization. Deserialization restores transmitted values without running DTO initializers.
 - Add nested collection, interface, standard generated-client request/response and reflection regression coverage. REST endpoints, authorization, audit hooks and masking integrations remain enabled and unchanged.
+- Reject dictionary/map shapes before registration/export rather than advertising an unsupported key/value contract or losing nullable values. Server discovery skips them, or fails in strict mode; REST remains available.
 - See [MIGRATING-4.0.md](MIGRATING-4.0.md). Do not mix 3.x and 4.x serializers behind one gRPC address.
 
 - Reuse a bound client's resolved RPC method and operation identity for a prepared contract snapshot. Rebuild them after contract refresh; preserve routing, audit payloads, metadata guards and cancellation.
