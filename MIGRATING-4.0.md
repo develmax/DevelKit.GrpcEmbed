@@ -1,7 +1,7 @@
 # Migrating to GrpcEmbed 4.0
 
 4.0 is a **breaking Protobuf wire-format change**, not a rolling-compatible patch
-for 3.x. Update all five package IDs together to 4.0.0 where they are referenced.
+for 3.x. Update all five package IDs together to 4.0.1 or later where they are referenced.
 REST endpoints and generated REST clients do not change.
 
 Use **4.0.1 or later**: 4.0.0 can overflow the stack while building serializers
