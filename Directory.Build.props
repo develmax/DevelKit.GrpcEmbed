@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>4.0.0</Version>
+    <Version>4.0.1</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Preserve null, empty and populated nested collections and nullable collection items using a new presence-aware wire profile. Regenerate external clients and update both peers; 3.x contracts are incompatible and rejected by contract shape guards. See MIGRATING-4.0.md and CHANGELOG.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Fix serializer-construction stack overflow for recursive collection DTOs through deferred wire serializer resolution. Preserve the 4.0.0 wire format, descriptors and contract fingerprints. Use 4.0.1 for recursive contracts. Migration from 3.x still requires updating both peers; see MIGRATING-4.0.md and CHANGELOG.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

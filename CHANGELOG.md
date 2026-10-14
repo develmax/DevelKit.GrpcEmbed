@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.0.1 — 2026-10-14
+
+- Fix serializer-construction stack overflow for direct and mutually recursive collection DTOs. Use a public serializer provider with deferred wire serializer resolution instead of eagerly rebuilding a surrogate chain. Preserve the 4.0.0 wire profile, descriptors and contract fingerprints.
+- Add recursive collection, mutual array/interface recursion and cyclic-object rejection regressions.
+
 ## 4.0.0 — 2026-10-14
 
 - Breaking wire change: presence-aware collection and item wrappers preserve null, empty and populated collections, including nested properties, arrays and supported collection interfaces. Nullable scalar and reference items retain presence, including zero and empty values.

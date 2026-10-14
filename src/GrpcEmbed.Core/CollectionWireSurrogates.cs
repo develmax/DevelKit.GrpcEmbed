@@ -4,6 +4,7 @@ using System.Reflection.Emit;
 using System.Runtime.Serialization;
 using ProtoBuf;
 using ProtoBuf.Meta;
+using ProtoBuf.Serializers;
 
 namespace GrpcEmbed;
 
@@ -54,11 +55,27 @@ internal static class CollectionWireSurrogates
         var fromWire = Expression.Lambda<Func<TWire, T>>(Expression.Block(new[] { target }, assignments), input).Compile();
         WireConversions<T, TWire>.ToWireDelegate = toWire;
         WireConversions<T, TWire>.FromWireDelegate = fromWire;
-        model.SetSurrogate<T, TWire>(WireConversions<T, TWire>.ToWire, WireConversions<T, TWire>.FromWire, DataFormat.Default, CompatibilityLevel.Level300);
+        // SetSurrogate eagerly builds the surrogate serializer while building
+        // the DTO serializer. A wire field referring back to that DTO (directly
+        // or via a collection) re-enters the unfinished build indefinitely.
+        // This public serializer provider exposes constant message features and
+        // resolves the attributed wire serializer only when reading/writing,
+        // after the DTO provider is fully registered and cached.
+        model.Add(typeof(T), false, CompatibilityLevel.Level300).SerializerType = typeof(CollectionDtoSerializer<T, TWire>);
     }
 
     private static Type? Element(Type type) => type == typeof(string) || type == typeof(byte[]) ? null : type.IsArray
         ? type.GetElementType() : type.GetInterfaces().Append(type).FirstOrDefault(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IEnumerable<>))?.GetGenericArguments()[0];
+}
+
+internal sealed class CollectionDtoSerializer<T, TWire> : ISerializer<T>
+{
+    public static ISerializer<T> Instance { get; } = new CollectionDtoSerializer<T, TWire>();
+    public SerializerFeatures Features => SerializerFeatures.CategoryMessage | SerializerFeatures.WireTypeString;
+    public T Read(ref ProtoReader.State state, T value) => WireConversions<T, TWire>.FromWire(
+        state.GetSerializer<TWire>().Read(ref state, WireConversions<T, TWire>.ToWire(value)));
+    public void Write(ref ProtoWriter.State state, T value) =>
+        state.GetSerializer<TWire>().Write(ref state, WireConversions<T, TWire>.ToWire(value));
 }
 
 internal static class WireConversions<T, TWire>

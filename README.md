@@ -58,11 +58,11 @@ Choose **one** of these application-level installation commands:
 
 ```shell
 # Server and client
-dotnet add package DevelKit.GrpcEmbed --version 4.0.0
+dotnet add package DevelKit.GrpcEmbed --version 4.0.1
 # Server only
-dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 4.0.0
+dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 4.0.1
 # Client only
-dotnet add package DevelKit.GrpcEmbed.Client --version 4.0.0
+dotnet add package DevelKit.GrpcEmbed.Client --version 4.0.1
 ```
 
 The bundle pulls in `AspNetCore` and `Client`; both pull in `Core` and
@@ -120,7 +120,7 @@ public Task<UserDto> Get(int id, CancellationToken cancellationToken) => LoadUse
 
 ## Client
 
-The current source version is **4.0.0**, with
+The current source version is **4.0.1**, with
 presence-aware collection encoding and [client hot-path allocation improvements](docs/client-performance.md).
 It is **not wire-compatible with 3.x**. Read [Migrating to 4.0](MIGRATING-4.0.md)
 and update both peers before deployment. Before upgrading from
