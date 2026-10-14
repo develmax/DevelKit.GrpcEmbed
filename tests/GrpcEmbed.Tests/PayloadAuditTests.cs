@@ -45,11 +45,16 @@ public sealed class PayloadAuditTests
         Assert.Equal("POST", handler.Verbs.Single());
         Assert.Equal(handler.Verbs.Single(), serverVerbs.Single());
         Assert.Null(GrpcEmbedClientPayloadAudit.Current);
+        _ = await client.GetAsync(0, default); // Bind Get before the concurrent warmed calls.
         var values = await Task.WhenAll(Enumerable.Range(1, 20).Select(id => client.GetAsync(id, default)));
         Assert.Equal(Enumerable.Range(1, 20), values.Select(x => x.Id));
-        Assert.Equal(21, handler.Completions); Assert.Equal(21, handler.Releases);
+        Assert.Equal(22, handler.Completions); Assert.Equal(22, handler.Releases);
         Assert.Null(GrpcEmbedClientPayloadAudit.Current);
         Assert.All(handler.Statuses, status => Assert.Equal(0, status));
+        var getOperations = handler.Operations.Where(x => x.EndsWith("/Get", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(21, getOperations.Length);
+        // Once a manifest is prepared, routed headers and payload audit reuse one identity.
+        Assert.All(getOperations, operation => Assert.Same(getOperations[0], operation));
     }
 
     [Fact]
@@ -70,6 +75,7 @@ public sealed class PayloadAuditTests
         public ConcurrentQueue<object?> Responses { get; } = new();
         public ConcurrentQueue<int> Statuses { get; } = new();
         public ConcurrentQueue<string?> Verbs { get; } = new();
+        public ConcurrentQueue<string> Operations { get; } = new();
         public int Completions, Releases;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
@@ -77,6 +83,8 @@ public sealed class PayloadAuditTests
             {
                 var audit = GrpcEmbedClientPayloadAudit.Current;
                 Assert.NotNull(audit);
+                Operations.Enqueue(audit.Operation);
+                Assert.Same(audit.Operation, request.Headers.GetValues(GrpcEmbedContractHeaders.Operation).Single());
                 Requests.Enqueue(audit.RequestBody);
                 Verbs.Enqueue(audit.HttpMethod);
                 audit.Completed = (value, status) => { Responses.Enqueue(value); Statuses.Enqueue(status); Interlocked.Increment(ref Completions); };

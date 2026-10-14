@@ -10,6 +10,11 @@ HTTP/2 by default, with opt-in HTTP/3 support. See [transport support](#transpor
 
 NuGet package: `DevelKit.GrpcEmbed`.
 
+Version 4.0 introduces presence-aware collection encoding: `null`, `[]`, populated
+collections and nullable items stay distinct, including nested DTO properties.
+This is a breaking wire change. See [migration to 4.0](MIGRATING-4.0.md) before
+upgrading; update both peers and regenerate downloaded Protobuf clients.
+
 Maintainers: [automated NuGet.org releases](docs/nuget-publishing.md) publish
 packages and symbols from version tags after CI and CodeQL.
 
@@ -53,11 +58,11 @@ Choose **one** of these application-level installation commands:
 
 ```shell
 # Server and client
-dotnet add package DevelKit.GrpcEmbed --version 3.0.2
+dotnet add package DevelKit.GrpcEmbed --version 4.0.0
 # Server only
-dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 3.0.2
+dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 4.0.0
 # Client only
-dotnet add package DevelKit.GrpcEmbed.Client --version 3.0.2
+dotnet add package DevelKit.GrpcEmbed.Client --version 4.0.0
 ```
 
 The bundle pulls in `AspNetCore` and `Client`; both pull in `Core` and
@@ -115,8 +120,10 @@ public Task<UserDto> Get(int id, CancellationToken cancellationToken) => LoadUse
 
 ## Client
 
-The current source version is **3.0.2**, wire-compatible with 3.0.0/3.0.1 and including
-[client hot-path allocation improvements](docs/client-performance.md). Before upgrading from
+The current source version is **4.0.0**, with
+presence-aware collection encoding and [client hot-path allocation improvements](docs/client-performance.md).
+It is **not wire-compatible with 3.x**. Read [Migrating to 4.0](MIGRATING-4.0.md)
+and update both peers before deployment. Before upgrading from
 1.0.0, read the [migration guide](docs/migration-2.0.md) and
 [changelog](CHANGELOG.md). Source version does not imply NuGet publication.
 If this source patch has not been published yet, use the locally built packages

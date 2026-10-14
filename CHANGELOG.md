@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.0.0 — 2026-10-14
+
+- Breaking wire change: presence-aware collection and item wrappers preserve null, empty and populated collections, including nested properties, arrays and supported collection interfaces. Nullable scalar and reference items retain presence, including zero and empty values.
+- Export matching Protobuf messages and reflection descriptors with optional item values. Keep existing DTO field numbers and level-300 special type encoding.
+- Change schema and CLR shape fingerprints so configured contract discovery/validation rejects 3.x peers before business execution. Fetch-free or validation-disabled clients still require operational version coordination.
+- Compile attributed wire surrogates once for collection-bearing DTOs using public protobuf-net APIs. DTOs without collections keep direct serialization. Deserialization restores transmitted values without running DTO initializers.
+- Add nested collection, interface, standard generated-client request/response and reflection regression coverage. REST endpoints, authorization, audit hooks and masking integrations remain enabled and unchanged.
+- Reject dictionary/map shapes before registration/export rather than advertising an unsupported key/value contract or losing nullable values. Server discovery skips them, or fails in strict mode; REST remains available.
+- See [MIGRATING-4.0.md](MIGRATING-4.0.md). Do not mix 3.x and 4.x serializers behind one gRPC address.
+
+- Reuse a bound client's resolved RPC method and operation identity for a prepared contract snapshot. Rebuild them after contract refresh; preserve routing, audit payloads, metadata guards and cancellation.
+
 ## 3.1.1 — 2026-10-12
 
 - Resolve operations without per-call LINQ candidate arrays when the client discovers the service automatically. Preserve model-shape validation, ambiguous-operation errors and refreshed contract snapshots.
