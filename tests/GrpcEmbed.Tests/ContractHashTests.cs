@@ -63,7 +63,7 @@ public sealed class ContractHashTests : IClassFixture<WebApplicationFactory<Prog
             new AssemblyName("ContractVersionTest") { Version = new Version(version, 0, 0, 0) },
             AssemblyBuilderAccess.Run);
         var type = assembly.DefineDynamicModule("Contracts").DefineType("StableDto", TypeAttributes.Public);
-        var fields = new[] { ("Id", typeof(int)), ("Name", changed ? typeof(int) : typeof(string)) };
+        var fields = new[] { ("Id", typeof(int)), ("Name", changed ? typeof(int) : typeof(string)), ("Items", typeof(List<int?>)) };
         foreach (var (name, fieldType) in reverse ? fields.Reverse() : fields)
         {
             var field = type.DefineField("_" + name, fieldType, FieldAttributes.Private);

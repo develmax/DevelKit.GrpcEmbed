@@ -120,7 +120,8 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
     private ClientContractState _contractState = null!;
     private readonly Dictionary<MethodInfo, Func<object?[]?, object>> _calls = new();
     private readonly Dictionary<MethodInfo, GrpcEmbedOperation> _operations = new();
-    private sealed record BoundRoute(ClientContractState.PreparedContract Contract, Func<object?[], string> Path);
+    private sealed record BoundCall<TRequest, TWireResponse>(ClientContractState.PreparedContract? Contract,
+        Method<TRequest, TWireResponse> Method, string Operation, Func<object?[], string>? Path);
 
     public static TContract Create(CallInvoker invoker, GrpcEmbedClientOptions options)
     {
@@ -217,21 +218,26 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
         if (_options.CaptureAuditPayloads) ClientAuditBody<TRequest>.Initialize();
         var contractService = _options.ServiceName is null && serviceAttribute is null && _options.OperationResolver is null
             ? null : method.ServiceName;
-        BoundRoute? boundRoute = null;
-        string RoutePath(ClientContractState.PreparedContract prepared, object?[] args)
+        BoundCall<TRequest, TWireResponse>? boundCall = null;
+        BoundCall<TRequest, TWireResponse> ResolveCall(ClientContractState.PreparedContract? prepared)
         {
-            var current = Volatile.Read(ref boundRoute);
+            var current = Volatile.Read(ref boundCall);
             if (current is null || !ReferenceEquals(current.Contract, prepared))
             {
-                current = new BoundRoute(prepared, ClientRoute.Bind(_options, prepared.Route, prepared.Service, method.Name, parameters));
-                Volatile.Write(ref boundRoute, current);
+                var activeMethod = prepared is not null && prepared.Service != method.ServiceName
+                    ? ResolvedContractMethods<TRequest, TWireResponse>.Get(method, prepared.Service) : method;
+                var path = _options.Routing.Mode == GrpcEmbedRoutingMode.Native || prepared is null ? null
+                    : ClientRoute.Bind(_options, prepared.Route, prepared.Service, method.Name, parameters);
+                current = new BoundCall<TRequest, TWireResponse>(prepared, activeMethod,
+                    activeMethod.ServiceName + "/" + activeMethod.Name, path);
+                Volatile.Write(ref boundCall, current);
             }
-            return current.Path(args);
+            return current;
         }
         return args =>
         {
             var task = CallCore<TRequest, TWireResponse, TResponse>(method, contractService, parameters.Length,
-                requestFactory, RoutePath, args ?? Array.Empty<object?>());
+                requestFactory, ResolveCall, args ?? Array.Empty<object?>());
             if (contract.ReturnType == typeof(ValueTask)) return new ValueTask(task);
             return returnsValueTask ? new ValueTask<TResponse>(task) : task;
         };
@@ -239,7 +245,7 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
 
     private async Task<TResponse> CallCore<TRequest, TWireResponse, TResponse>(Method<TRequest, TWireResponse> method,
         string? contractService, int parameterCount, Func<object?[], TRequest> requestFactory,
-        Func<ClientContractState.PreparedContract, object?[], string> routePath, object?[] args) where TRequest : class where TWireResponse : class
+        Func<ClientContractState.PreparedContract?, BoundCall<TRequest, TWireResponse>> resolveCall, object?[] args) where TRequest : class where TWireResponse : class
     {
         var request = requestFactory(args);
         var cancellation = contractCancellation(parameterCount, args);
@@ -252,8 +258,8 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
             await _contractState.PrepareAsync(contractService, method.Name,
                 ContractShapeCache<TRequest>.Hash, ContractShapeCache<TWireResponse>.Hash, token, deadline).ConfigureAwait(false);
         var hash = prepared?.Hash;
-        var activeMethod = prepared is not null && prepared.Service != method.ServiceName
-            ? ResolvedContractMethods<TRequest, TWireResponse>.Get(method, prepared.Service) : method;
+        var bound = resolveCall(prepared);
+        var activeMethod = bound.Method;
         var metadata = _options.MetadataFactory?.Invoke();
         var routedCall = _options.Routing.Mode != GrpcEmbedRoutingMode.Native;
         if (routedCall || _options.Contract.SendHash)
@@ -266,14 +272,14 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
             if (routedCall)
             {
                 if (prepared is null) throw new InvalidOperationException("URL routing requires a fetched contract.");
-                guarded.Add(GrpcEmbedContractHeaders.Operation, activeMethod.ServiceName + "/" + activeMethod.Name);
-                guarded.Add(GrpcEmbedChannelFactory.PathHeader, routePath(prepared, args));
+                guarded.Add(GrpcEmbedContractHeaders.Operation, bound.Operation);
+                guarded.Add(GrpcEmbedChannelFactory.PathHeader, bound.Path!(args));
             }
             if (_options.Contract.SendHash) guarded.Add(GrpcEmbedContractHeaders.RequestHash, hash!);
             metadata = guarded;
         }
         using var audit = _options.CaptureAuditPayloads ? new GrpcEmbedClientPayloadAudit(
-            activeMethod.ServiceName + "/" + activeMethod.Name,
+            bound.Operation,
             prepared is null ? request : ClientAuditBody<TRequest>.Read(request, prepared.BodyParameter), prepared?.HttpMethod) : null;
         using var call = _invoker.AsyncUnaryCall(activeMethod, null, new CallOptions(headers: metadata, deadline: deadline, cancellationToken: token), request);
         var responseReceived = false;

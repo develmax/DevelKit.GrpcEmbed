@@ -1,5 +1,9 @@
 # Standard Protobuf wire-format correction
 
+This document describes the historical **3.0** correction. For the subsequent
+breaking collection-presence change, use [Migrating to 4.0](../MIGRATING-4.0.md).
+The plain repeated-field limitations below apply to 3.x, not 4.x.
+
 The 3.0.0 interoperability fix changes the wire encoding of special CLR
 types. Do not overwrite published 2.1.2 packages or treat this as a wire-compatible
 rolling upgrade. All five packages are released together as version 3.0.0.

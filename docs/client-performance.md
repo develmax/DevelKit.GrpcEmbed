@@ -26,6 +26,10 @@ and URI-escapes route values; no request-specific parameters are shared.
 A bound route captures startup routing configuration. A newly fetched contract
 snapshot replaces the binding, so contract refresh cannot keep using the old
 server route. Concurrent calls hold independent immutable binding references.
+The unreleased client also binds the resolved RPC method and operation identity
+to that snapshot. Routing metadata and payload-audit callbacks reuse the same
+identity instead of rebuilding it for each request; no DTO or argument values
+are retained in the binding.
 Configure routing options before resolving/initializing the client, rather than
 mutating the options object while it is serving requests.
 

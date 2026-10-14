@@ -14,7 +14,7 @@ public static class GrpcEmbedContractShape
         // Include the wire profile, not only the CLR shape. Otherwise an old
         // client could refresh a new server hash while retaining the legacy
         // GUID/decimal/date serializers and send an incompatible payload.
-        var text = new StringBuilder("grpcembed-shape-v2-level300;");
+        var text = new StringBuilder("grpcembed-shape-v3-level300-collection-presence;");
         void Visit(Type type)
         {
             if (Nullable.GetUnderlyingType(type) is { } nullable)

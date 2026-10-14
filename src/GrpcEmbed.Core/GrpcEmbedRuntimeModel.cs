@@ -36,8 +36,18 @@ public static class GrpcEmbedRuntimeModel
         // Add(..., false) skips default behavior, including compatibility-level
         // resolution. Set it explicitly before adding fields so Guid/decimal
         // and DateTime/TimeSpan match the exported standard Protobuf schema.
-        var meta = Model.Add(type, false, CompatibilityLevel.Level300);
-        foreach (var property in properties) { meta.Add(numbers[property.Name], property.Name); ConfigureCore(property.PropertyType); }
+        if (properties.Any(p => TryElement(p.PropertyType, out _)))
+            CollectionWireSurrogates.Register(Model, type, properties, numbers);
+        else
+        {
+            var meta = Model.Add(type, false, CompatibilityLevel.Level300);
+            meta.UseConstructor = false;
+            foreach (var property in properties) meta.Add(numbers[property.Name], property.Name);
+        }
+        foreach (var property in properties)
+        {
+            ConfigureCore(property.PropertyType);
+        }
     }
 
     private static bool TryElement(Type type, out Type? element)

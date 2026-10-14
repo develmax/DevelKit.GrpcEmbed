@@ -46,7 +46,7 @@ internal static class SchemaGenerator
             .ThenBy(method => method.MethodName, StringComparer.Ordinal)
             .Select(SchemaManifestManager.GetRoute));
         var hash = computeHash ? Convert.ToHexString(SHA256.HashData(
-            Encoding.UTF8.GetBytes("grpcembed-contract-v3-level300\n" + proto + "\n" + routes + "\n" +
+            Encoding.UTF8.GetBytes("grpcembed-contract-v4-level300-collection-presence\n" + proto + "\n" + routes + "\n" +
                 (routing?.Mode ?? GrpcEmbedRoutingMode.Native) + "\n" + (routing?.Prefix ?? "grpc")))).ToLowerInvariant() : string.Empty;
         return new GrpcEmbedSchema(proto, hash, set.ToByteArray(), set.File.Select(x => x.ToByteArray()).ToArray(), methods.Select(x => "GrpcEmbed." + x.ServiceName).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray());
     }
@@ -70,6 +70,7 @@ internal static class SchemaGenerator
         var numbers = GrpcEmbedFieldNumbers.Assign(members);
         messages[type] = string.Empty;
         var text = new StringBuilder("message ").Append(TypeName(type)).Append(" {\n");
+        var wrappers = new StringBuilder();
         var reserved = ReservedNumbers(type);
         if (reserved.Count > 0) text.Append("  reserved ").Append(string.Join(", ", reserved)).Append(";\n");
         foreach (var member in members.OrderBy(x => numbers[x.Name]))
@@ -79,9 +80,20 @@ internal static class SchemaGenerator
             var repeated = memberType != typeof(string) && memberType != typeof(byte[]) && TryElement(memberType, out element);
             var actual = repeated ? Nullable.GetUnderlyingType(element!) ?? element! : memberType;
             AddMessage(actual, messages);
-            text.Append("  ").Append(repeated ? "repeated " : string.Empty).Append(ProtoType(actual)).Append(' ').Append(ToSnake(member.Name)).Append(" = ").Append(numbers[member.Name].ToString(CultureInfo.InvariantCulture)).Append(";\n");
+            var fieldType = ProtoType(actual);
+            if (repeated)
+            {
+                fieldType = CollectionName(type, numbers[member.Name]);
+                var wrapItem = WrapItem(element!);
+                wrappers.Append("message ").Append(fieldType).Append(" {\n  repeated ")
+                    .Append(wrapItem ? fieldType + "_Item" : ProtoType(actual)).Append(" items = 1;\n}\n\n");
+                if (wrapItem) wrappers.Append("message ").Append(fieldType).Append("_Item {\n  ")
+                    .Append(IsScalar(actual) || actual.IsEnum ? "optional " : "")
+                    .Append(ProtoType(actual)).Append(" value = 1;\n}\n\n");
+            }
+            text.Append("  ").Append(fieldType).Append(' ').Append(ToSnake(member.Name)).Append(" = ").Append(numbers[member.Name].ToString(CultureInfo.InvariantCulture)).Append(";\n");
         }
-        text.Append("}\n\n"); messages[type] = text.ToString();
+        text.Append("}\n\n").Append(wrappers); messages[type] = text.ToString();
     }
 
     private static bool TryElement(Type type, out Type? element)
@@ -93,6 +105,8 @@ internal static class SchemaGenerator
     private static bool IsScalar(Type t) => t.IsPrimitive || t == typeof(string) || t == typeof(byte[]) || t == typeof(decimal) || t == typeof(Guid) || t == typeof(DateTime) || t == typeof(DateTimeOffset) || t == typeof(TimeSpan);
     private static string ProtoType(Type type) => type.IsEnum ? TypeName(type) : type == typeof(bool) ? "bool" : type == typeof(byte[]) ? "bytes" : type == typeof(DateTime) ? "google.protobuf.Timestamp" : type == typeof(TimeSpan) ? "google.protobuf.Duration" : type == typeof(string) || type == typeof(Guid) || type == typeof(decimal) || type == typeof(DateTimeOffset) ? "string" : type == typeof(float) ? "float" : type == typeof(double) ? "double" : type == typeof(long) ? "int64" : type == typeof(ulong) ? "uint64" : type == typeof(uint) || type == typeof(ushort) || type == typeof(byte) ? "uint32" : type.IsPrimitive ? "int32" : TypeName(type);
     private static string TypeName(Type type) => new(type.Name.TakeWhile(c => c != '`').Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
+    private static string CollectionName(Type owner, int number) => "GrpcEmbedCollection_" + TypeName(owner) + "_" + number.ToString(CultureInfo.InvariantCulture);
+    private static bool WrapItem(Type element) => !element.IsValueType || Nullable.GetUnderlyingType(element) is not null;
     private static string ToSnake(string name) => string.Concat(name.Select((c, i) => char.IsUpper(c) && i > 0 ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
     private static bool ContainsType(Type declared, Type sought, ISet<Type>? visited = null)
     {
@@ -140,8 +154,30 @@ internal static class SchemaGenerator
             var memberType = Nullable.GetUnderlyingType(member.PropertyType) ?? member.PropertyType; Type? element = null;
             var repeated = memberType != typeof(string) && memberType != typeof(byte[]) && TryElement(memberType, out element);
             var actual = repeated ? Nullable.GetUnderlyingType(element!) ?? element! : memberType; AddDescriptorMessage(actual, file, seen);
-            var field = new FieldDescriptorProto { Name = ToSnake(member.Name), Number = numbers[member.Name], Label = repeated ? FieldDescriptorProto.Types.Label.Repeated : FieldDescriptorProto.Types.Label.Optional };
+            var field = new FieldDescriptorProto { Name = ToSnake(member.Name), Number = numbers[member.Name], Label = FieldDescriptorProto.Types.Label.Optional };
             var descriptorType = DescriptorType(actual);
+            if (repeated)
+            {
+                var name = CollectionName(type, numbers[member.Name]);
+                var wrapper = new DescriptorProto { Name = name };
+                var items = new FieldDescriptorProto { Name = "items", Number = 1, Label = FieldDescriptorProto.Types.Label.Repeated };
+                if (WrapItem(element!))
+                {
+                    items.Type = FieldDescriptorProto.Types.Type.Message; items.TypeName = ".GrpcEmbed." + name + "_Item";
+                    var item = new DescriptorProto { Name = name + "_Item" };
+                    var value = new FieldDescriptorProto { Name = "value", Number = 1, Label = FieldDescriptorProto.Types.Label.Optional, Type = descriptorType.Item1 };
+                    if (descriptorType.Item2.Length != 0) value.TypeName = descriptorType.Item2;
+                    if (IsScalar(actual) || actual.IsEnum)
+                    {
+                        item.OneofDecl.Add(new OneofDescriptorProto { Name = "_value" });
+                        value.Proto3Optional = true; value.OneofIndex = 0;
+                    }
+                    item.Field.Add(value); file.MessageType.Add(item);
+                }
+                else { items.Type = descriptorType.Item1; if (descriptorType.Item2.Length != 0) items.TypeName = descriptorType.Item2; }
+                wrapper.Field.Add(items); file.MessageType.Add(wrapper);
+                descriptorType = (FieldDescriptorProto.Types.Type.Message, ".GrpcEmbed." + name);
+            }
             field.Type = descriptorType.Item1;
             // An explicitly present empty type_name is not the same as absent:
             // standard descriptor resolvers try to resolve it as a symbol.

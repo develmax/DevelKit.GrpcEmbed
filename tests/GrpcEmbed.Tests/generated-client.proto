@@ -12,10 +12,16 @@ message WireFixture {
   google.protobuf.Timestamp at = 4;
   google.protobuf.Duration elapsed = 5;
   string offset_at = 6;
-  repeated WireState states = 7;
-  repeated int32 values = 8;
-  repeated string ids = 9;
+  WireStates states = 7;
+  WireValues values = 8;
+  WireIds ids = 9;
 }
+message WireStates { repeated WireStateItem items = 1; }
+message WireStateItem { optional WireState value = 1; }
+message WireValues { repeated WireValueItem items = 1; }
+message WireValueItem { optional int32 value = 1; }
+message WireIds { repeated WireIdItem items = 1; }
+message WireIdItem { optional string value = 1; }
 message Wire_Echo_Request { WireFixture request = 347691040; }
 service Wire { rpc Echo (Wire_Echo_Request) returns (WireFixture); }
 
