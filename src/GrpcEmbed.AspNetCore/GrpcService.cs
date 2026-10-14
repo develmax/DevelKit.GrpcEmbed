@@ -114,12 +114,14 @@ internal sealed class GrpcEmbedService
 
         async Task<ResourceExecutedContext> Next(int index)
         {
+            // Unrelated filter categories have no work at this stage. Skip them
+            // in-place instead of allocating a recursive async frame for each.
+            while (index < filters.Length && filters[index] is not IResourceFilter && filters[index] is not IAsyncResourceFilter) index++;
             if (index == filters.Length)
             {
                 var result = await InvokeActionAndResultFilters(method, controller, actionContext, filters, arguments);
                 return new ResourceExecutedContext(actionContext, filterList) { Result = result as IActionResult ?? new ObjectResult(result) };
             }
-            if (filters[index] is not IResourceFilter && filters[index] is not IAsyncResourceFilter) return await Next(index + 1);
             var executing = new ResourceExecutingContext(actionContext, filterList, new List<Microsoft.AspNetCore.Mvc.ModelBinding.IValueProviderFactory>());
             if (filters[index] is IAsyncResourceFilter asyncFilter)
             {
@@ -147,6 +149,7 @@ internal sealed class GrpcEmbedService
         var executing = new ActionExecutingContext(actionContext, filters.ToList(), dictionary, controller);
         async Task<ActionExecutedContext> Next(int index)
         {
+            while (index < filters.Length && filters[index] is not IActionFilter && filters[index] is not IAsyncActionFilter) index++;
             if (index == filters.Length)
             {
                 for (var i = 0; i < arguments.Length; i++) arguments[i] = dictionary[method.Arguments[i].Parameter.Name!];
@@ -172,6 +175,7 @@ internal sealed class GrpcEmbedService
         var resultExecuting = new ResultExecutingContext(actionContext, filters.ToList(), actionResult, controller);
         async Task<ResultExecutedContext> ResultNext(int index)
         {
+            while (index < filters.Length && filters[index] is not IResultFilter && filters[index] is not IAsyncResultFilter) index++;
             if (index == filters.Length) return new ResultExecutedContext(actionContext, filters.ToList(), resultExecuting.Result, controller);
             if (filters[index] is IAsyncResultFilter asyncFilter)
             {
