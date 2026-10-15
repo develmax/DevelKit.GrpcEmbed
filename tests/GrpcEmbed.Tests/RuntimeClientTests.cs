@@ -48,6 +48,27 @@ public sealed class RuntimeClientTests : IClassFixture<WebApplicationFactory<Pro
     }
 
     [Fact]
+    public async Task Repeated_and_parallel_proxy_calls_keep_arguments_isolated()
+    {
+        using var http = _factory.CreateClient();
+        var services = new ServiceCollection();
+        services.AddGrpcEmbedClient<IExistingClient>(options =>
+        {
+            options.Address = http.BaseAddress!;
+            options.ServiceName = "Users";
+            options.HttpClient = http;
+        });
+        using var provider = services.BuildServiceProvider();
+        provider.InitializeGrpcEmbedClients();
+        var client = provider.GetRequiredService<IExistingClient>();
+        Assert.Equal(31, (await client.GetAsync(31)).Id);
+        var ids = Enumerable.Range(1, 64).ToArray();
+        var results = await Task.WhenAll(ids.Select(id => client.GetAsync(id)));
+        Assert.Equal(ids, results.Select(result => result.Id));
+        Assert.Equal(32, (await client.GetAsync(32, CancellationToken.None)).Id);
+    }
+
+    [Fact]
     public async Task Completion_only_methods_support_task_value_task_and_no_content()
     {
         using var http = _factory.CreateClient();
