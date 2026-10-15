@@ -10,6 +10,11 @@ HTTP/2 by default, with opt-in HTTP/3 support. See [transport support](#transpor
 
 NuGet package: `DevelKit.GrpcEmbed`.
 
+Version 4.0 introduces presence-aware collection encoding: `null`, `[]`, populated
+collections and nullable items stay distinct, including nested DTO properties.
+This is a breaking wire change. See [migration to 4.0](MIGRATING-4.0.md) before
+upgrading; update both peers and regenerate downloaded Protobuf clients.
+
 Maintainers: [automated NuGet.org releases](docs/nuget-publishing.md) publish
 packages and symbols from version tags after CI and CodeQL.
 
@@ -53,11 +58,11 @@ Choose **one** of these application-level installation commands:
 
 ```shell
 # Server and client
-dotnet add package DevelKit.GrpcEmbed --version 2.1.2
+dotnet add package DevelKit.GrpcEmbed --version 4.0.2
 # Server only
-dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 2.1.2
+dotnet add package DevelKit.GrpcEmbed.AspNetCore --version 4.0.2
 # Client only
-dotnet add package DevelKit.GrpcEmbed.Client --version 2.1.2
+dotnet add package DevelKit.GrpcEmbed.Client --version 4.0.2
 ```
 
 The bundle pulls in `AspNetCore` and `Client`; both pull in `Core` and
@@ -115,13 +120,18 @@ public Task<UserDto> Get(int id, CancellationToken cancellationToken) => LoadUse
 
 ## Client
 
-The current source version is **2.1.2**. Before upgrading from
+The current source version is **4.0.2**, with
+presence-aware collection encoding and [client hot-path allocation improvements](docs/client-performance.md).
+It is **not wire-compatible with 3.x**. Read [Migrating to 4.0](MIGRATING-4.0.md)
+and update both peers before deployment. Before upgrading from
 1.0.0, read the [migration guide](docs/migration-2.0.md) and
 [changelog](CHANGELOG.md). Source version does not imply NuGet publication.
 If this source patch has not been published yet, use the locally built packages
 instead of expecting the installation commands to resolve it from NuGet.org.
-The 2.1.2 client restores omitted empty wrapped responses without changing the
-wire contract and works with existing 2.1.1 servers.
+Version 3.0.0 corrects the wire encoding of GUIDs, decimals and dates to match
+standard Protobuf clients. It is **not wire-compatible with 2.x**: upgrade clients
+and servers together and refresh pinned contracts/hashes. Read the
+[3.0 wire-format migration guide](docs/wire-format-migration.md) before deployment.
 For upgrades from 2.0, also read the [2.1 routing migration notes](docs/url-routing.md).
 See [runtime client integration](docs/runtime-clients.md) and
 [configurable contract safety](docs/contract-safety.md) for the new opt-in APIs.
