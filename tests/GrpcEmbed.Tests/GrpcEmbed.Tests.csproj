@@ -4,7 +4,7 @@
     <ProjectReference Include="../../src/GrpcEmbed.Abstractions/GrpcEmbed.Abstractions.csproj" />
     <ProjectReference Include="../../src/GrpcEmbed.Client/GrpcEmbed.Client.csproj" />
     <ProjectReference Include="../../samples/GrpcEmbed.Sample.Server/GrpcEmbed.Sample.Server.csproj" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
     <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
     <PackageReference Include="Grpc.Tools" Version="2.71.0"><PrivateAssets>all</PrivateAssets></PackageReference>
