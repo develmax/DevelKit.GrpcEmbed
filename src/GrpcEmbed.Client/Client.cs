@@ -237,10 +237,12 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
             }
             return current;
         }
+        // Bind the captured local function once, not a new delegate for every RPC.
+        Func<ClientContractState.PreparedContract?, BoundCall<TRequest, TWireResponse>> resolveCall = ResolveCall;
         return args =>
         {
             var task = CallCore<TRequest, TWireResponse, TResponse>(parameters.Length, prepareContract,
-                requestFactory, ResolveCall, args ?? Array.Empty<object?>());
+                requestFactory, resolveCall, args ?? Array.Empty<object?>());
             if (contract.ReturnType == typeof(ValueTask)) return new ValueTask(task);
             return returnsValueTask ? new ValueTask<TResponse>(task) : task;
         };
