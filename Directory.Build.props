@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>4.0.5</Version>
+    <Version>4.0.6</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Reuse one request-local MVC filter-context list while keeping filter execution order stable. Bind successful client operation and model-shape resolution to the exact loaded contract snapshot; revalidate after refresh. Preserve parallel-request isolation, authorization, short circuits, exceptions, argument mutation, the 4.0.x wire format, audit and masking integrations. See CHANGELOG.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Reduce client route-header, route-building and bound-call delegate allocations; materialize request-scoped MVC filters without a captured LINQ selector. Preserve filter order, DI scopes, contract refresh, cancellation, the 4.0.x wire format, authorization, audit and masking integrations. No universal end-to-end latency gain is claimed. See CHANGELOG.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

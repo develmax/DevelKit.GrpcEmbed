@@ -2,7 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## 4.0.6 — 2026-10-16
+
+- Materialize MVC filters without a per-request captured LINQ selector/iterator. Preserve descriptor order, request-scoped factory resolution, exception propagation and separate execution/context collections. An isolated .NET 6 probe saves 160 bytes per materialization; this is not a whole-request latency claim.
+- Bind the captured client operation resolver delegate once per proxy method instead of allocating it on every RPC. Preserve contract refresh, parallel argument isolation and cancellation. An isolated .NET 6 probe saves 64 bytes per call.
+- Add scoped factory, exception, repeated-call and parallel-call regressions. The 4.0.x wire format, schema fingerprints, authorization, full body-audit and masking hooks are unchanged; existing 4.x contracts do not require regeneration.
 
 - Read the private per-call route header without materializing its values array or LINQ enumerator. Preserve exact single-value checks, URL restrictions, configured authority, cancellation and private-header removal. No wire, authorization or audit behavior changes; this reduces a small routing allocation, not a claimed business-latency speedup.
 - Pre-bind fixed URL parts for REST-compatible gRPC routes with one varying scalar. Avoid the per-call path builder and intermediate path string; preserve escaping, dot-segment rejection, default/empty/optional handling and general-route fallback. Cache only route plans, never argument values, DTOs, tokens or responses. No wire, schema, authorization, audit or masking changes; no universal end-to-end latency gain is claimed.
