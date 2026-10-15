@@ -11,7 +11,10 @@ public static class GrpcEmbedContractShape
     public static string Hash(Type root)
     {
         var nodes = new Dictionary<Type, int>();
-        var text = new StringBuilder("grpcembed-shape-v1;");
+        // Include the wire profile, not only the CLR shape. Otherwise an old
+        // client could refresh a new server hash while retaining the legacy
+        // GUID/decimal/date serializers and send an incompatible payload.
+        var text = new StringBuilder("grpcembed-shape-v3-level300-collection-presence;");
         void Visit(Type type)
         {
             if (Nullable.GetUnderlyingType(type) is { } nullable)

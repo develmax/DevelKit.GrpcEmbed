@@ -124,6 +124,9 @@ declare its response type explicitly.
 
 ### Empty wrapped responses (2.1.2)
 
+Historical compatibility behavior below applies to 2.x/3.x. Version 4.0 additionally
+preserves nested collection presence on the wire; see [migration](../MIGRATING-4.0.md).
+
 Protobuf omits empty repeated fields and empty string/byte defaults. A successful
 wrapped response is therefore restored as an empty CLR collection, array,
 string or byte array instead of a null wrapper value. Standard collection

@@ -19,9 +19,10 @@ public sealed class GrpcEmbedClientContractOptions
 
 internal sealed class ClientContractState
 {
-    internal sealed record PreparedContract(string Hash, string Service, ClientRoute? Route);
-    private sealed record Operation(string Request, string Response, ClientRoute? Route);
+    internal sealed record PreparedContract(string Hash, string Service, ClientRoute? Route, string? BodyParameter = null, string? HttpMethod = null);
+    private sealed record Operation(string Request, string Response, PreparedContract Prepared);
     private sealed record Snapshot(string Hash, Dictionary<string, Operation> Operations, DateTime Loaded);
+    private sealed record Resolution(Snapshot Snapshot, PreparedContract Prepared);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly GrpcEmbedClientOptions _options;
     private volatile Snapshot? _snapshot;
@@ -50,43 +51,93 @@ internal sealed class ClientContractState
             throw new InvalidOperationException("RefreshAndRetry requires SendHash.");
     }
 
-    public async Task<PreparedContract?> PrepareAsync(string? service, string method, string requestShape, string responseShape, CancellationToken token)
+    public async ValueTask<PreparedContract?> PrepareAsync(string? service, string method, string requestShape, string responseShape, CancellationToken token, DateTime? deadline = null)
     {
         if (_options.Contract.Fetch == GrpcEmbedContractFetch.Never) return null;
-        var snapshot = await LoadAsync(false, null, token).ConfigureAwait(false);
+        var snapshot = await LoadAsync(false, null, token, deadline).ConfigureAwait(false);
+        return Resolve(snapshot, service, method, requestShape, responseShape, service + "/" + method, "/" + method);
+    }
+
+    // One binding per proxy method. Cache only a successful model/operation
+    // resolution, scoped to the exact immutable snapshot, never request data.
+    internal Func<CancellationToken, DateTime?, ValueTask<PreparedContract?>> Bind(string? service, string method, string requestShape, string responseShape)
+    {
+        var key = service + "/" + method;
+        var suffix = "/" + method;
+        Resolution? resolved = null;
+        return Prepare;
+
+        async ValueTask<PreparedContract?> Prepare(CancellationToken token, DateTime? deadline)
+        {
+            if (_options.Contract.Fetch == GrpcEmbedContractFetch.Never) return null;
+            var snapshot = await LoadAsync(false, null, token, deadline).ConfigureAwait(false);
+            var cached = Volatile.Read(ref resolved);
+            if (cached is not null && ReferenceEquals(cached.Snapshot, snapshot)) return cached.Prepared;
+            var prepared = Resolve(snapshot, service, method, requestShape, responseShape, key, suffix);
+            Volatile.Write(ref resolved, new Resolution(snapshot, prepared));
+            return prepared;
+        }
+    }
+
+    private static PreparedContract Resolve(Snapshot snapshot, string? service, string method, string requestShape, string responseShape, string key, string suffix)
+    {
         if (service is null)
         {
-            var named = snapshot.Operations.Where(item => item.Key.EndsWith("/" + method, StringComparison.Ordinal)).ToArray();
-            var matching = named.Where(item => item.Value.Request == requestShape && item.Value.Response == responseShape).ToArray();
-            var selected = named.Length == 1 ? named : matching;
-            if (selected.Length != 1)
+            Operation? named = null, matching = null;
+            var namedCount = 0;
+            var matchingCount = 0;
+            foreach (var item in snapshot.Operations)
+            {
+                if (!item.Key.EndsWith(suffix, StringComparison.Ordinal)) continue;
+                named = item.Value;
+                namedCount++;
+                if (item.Value.Request != requestShape || item.Value.Response != responseShape) continue;
+                matching = item.Value;
+                matchingCount++;
+            }
+            var selected = namedCount == 1 ? named : matchingCount == 1 ? matching : null;
+            if (selected is null)
                 throw new RpcException(new Status(StatusCode.FailedPrecondition,
                     $"Cannot unambiguously resolve {method} in the server contract; configure Grpc.ServiceName."));
-            service = selected[0].Key[..selected[0].Key.LastIndexOf('/')];
+            if (selected.Request != requestShape || selected.Response != responseShape)
+                throw new RpcException(new Status(StatusCode.FailedPrecondition,
+                    $"Local models do not match the contract for {selected.Prepared.Service}/{method}; the operation was not sent."));
+            return selected.Prepared;
         }
-        var key = service + "/" + method;
         if (!snapshot.Operations.TryGetValue(key, out var operation))
             throw new RpcException(new Status(StatusCode.Unimplemented, $"Contract does not publish {key}."));
         if (operation.Request != requestShape || operation.Response != responseShape)
             throw new RpcException(new Status(StatusCode.FailedPrecondition,
                 $"Local models do not match the contract for {key}; the operation was not sent."));
-        return new PreparedContract(snapshot.Hash, service, operation.Route);
+        return operation.Prepared;
     }
 
     public async Task PreloadAsync(CancellationToken token) => _ = await LoadAsync(false, null, token).ConfigureAwait(false);
-    public async Task RefreshAsync(string? previousHash, CancellationToken token)
-        => _ = await LoadAsync(true, previousHash, token).ConfigureAwait(false);
+    public async Task RefreshAsync(string? previousHash, CancellationToken token, DateTime? deadline = null)
+        => _ = await LoadAsync(true, previousHash, token, deadline).ConfigureAwait(false);
 
-    private async Task<Snapshot> LoadAsync(bool force, string? previousHash, CancellationToken token)
+    private static bool Fresh(Snapshot? value, bool force, string? previousHash, TimeSpan? interval) => value is not null &&
+        (force ? value.Hash != previousHash : interval is null || DateTime.UtcNow - value.Loaded < interval.Value);
+
+    private async ValueTask<Snapshot> LoadAsync(bool force, string? previousHash, CancellationToken token, DateTime? deadline = null)
     {
-        bool Fresh(Snapshot? value) => value is not null &&
-            (force ? value.Hash != previousHash :
-                _options.Contract.RefreshInterval is not { } interval || DateTime.UtcNow - value.Loaded < interval);
-        if (Fresh(_snapshot)) return _snapshot!;
+        var current = _snapshot;
+        if (Fresh(current, force, previousHash, _options.Contract.RefreshInterval)) return current!;
+        // A warmed snapshot needs no timer. Bound only actual contract I/O and gate waits
+        // by the original call deadline; refresh/retry must not reset that budget.
+        using var timeout = deadline is null ? null : CancellationTokenSource.CreateLinkedTokenSource(token);
+        if (timeout is not null)
+        {
+            var remaining = deadline!.Value - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero) throw new OperationCanceledException("The call deadline elapsed before contract loading.", token);
+            timeout.CancelAfter(remaining);
+            token = timeout.Token;
+        }
         await _gate.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            if (Fresh(_snapshot)) return _snapshot!;
+            current = _snapshot;
+            if (Fresh(current, force, previousHash, _options.Contract.RefreshInterval)) return current!;
             var address = _options.Contract.Address ?? new Uri(_options.Address, "/_grpcembed/schema.json");
             using var request = new HttpRequestMessage(HttpMethod.Get, address)
             {
@@ -123,7 +174,13 @@ internal sealed class ClientContractState
                 operations.Add("GrpcEmbed." + service.Name + "/" + method.Name, new Operation(
                     method.Value.GetProperty("requestShapeHash").GetString() ?? "",
                     method.Value.GetProperty("responseShapeHash").GetString() ?? "",
-                    method.Value.TryGetProperty("route", out var route) && route.ValueKind == JsonValueKind.Object ? ClientRoute.Parse(route) : null));
+                    new PreparedContract(hash, "GrpcEmbed." + service.Name,
+                        method.Value.TryGetProperty("route", out var route) && route.ValueKind == JsonValueKind.Object ? ClientRoute.Parse(route) : null,
+                        method.Value.TryGetProperty("parameters", out var parameters) ? parameters.EnumerateArray()
+                            .Where(p => p.TryGetProperty("bindingSource", out var binding) && binding.GetString() == "Body")
+                            .Select(p => p.GetProperty("name").GetString()).SingleOrDefault() : null,
+                        route.ValueKind == JsonValueKind.Object && route.TryGetProperty("httpMethods", out var verbs)
+                            ? verbs.EnumerateArray().Select(x => x.GetString()).FirstOrDefault() : null)));
             return _snapshot = new Snapshot(hash, operations, DateTime.UtcNow);
         }
         finally { _gate.Release(); }
