@@ -63,14 +63,17 @@ internal sealed class GrpcEmbedService
             }
             Validate(arguments, method.Arguments);
             var filters = method.Action.FilterDescriptors.Select(x => x.Filter is IFilterFactory factory ? factory.CreateInstance(http.RequestServices) : x.Filter).ToArray();
+            // MVC contexts share one mutable list within the request. The execution
+            // array remains stable even if a filter annotates that contextual list.
+            var filterList = filters.ToList();
             object? raw = null;
             try
             {
-                raw = await InvokeWithActionFilters(method, controller, actionContext, filters, arguments);
+                raw = await InvokeWithActionFilters(method, controller, actionContext, filters, filterList, arguments);
             }
             catch (Exception exception)
             {
-                var exceptionContext = new ExceptionContext(actionContext, filters) { Exception = exception };
+                var exceptionContext = new ExceptionContext(actionContext, filterList) { Exception = exception };
                 foreach (var filter in filters.AsEnumerable().Reverse())
                 {
                     if (filter is IAsyncExceptionFilter asyncFilter) await asyncFilter.OnExceptionAsync(exceptionContext);
@@ -98,9 +101,8 @@ internal sealed class GrpcEmbedService
         finally { _controllers.ReleaseController(controllerContext, controller); }
     }
 
-    private static async Task<object?> InvokeWithActionFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, object?[] arguments)
+    private static async Task<object?> InvokeWithActionFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, IList<IFilterMetadata> filterList, object?[] arguments)
     {
-        var filterList = filters.ToList();
         var authorization = new AuthorizationFilterContext(actionContext, filterList);
         foreach (var filter in filters)
         {
@@ -108,9 +110,9 @@ internal sealed class GrpcEmbedService
             else if (filter is IAuthorizationFilter syncAuthorization) syncAuthorization.OnAuthorization(authorization);
             if (authorization.Result is not null) break;
         }
-        if (authorization.Result is not null) return await InvokeActionAndResultFilters(method, controller, actionContext, filters, arguments, authorization.Result);
+        if (authorization.Result is not null) return await InvokeActionAndResultFilters(method, controller, actionContext, filters, filterList, arguments, authorization.Result);
         if (!filters.Any(filter => filter is IResourceFilter or IAsyncResourceFilter))
-            return await InvokeActionAndResultFilters(method, controller, actionContext, filters, arguments);
+            return await InvokeActionAndResultFilters(method, controller, actionContext, filters, filterList, arguments);
 
         async Task<ResourceExecutedContext> Next(int index)
         {
@@ -119,7 +121,7 @@ internal sealed class GrpcEmbedService
             while (index < filters.Length && filters[index] is not IResourceFilter && filters[index] is not IAsyncResourceFilter) index++;
             if (index == filters.Length)
             {
-                var result = await InvokeActionAndResultFilters(method, controller, actionContext, filters, arguments);
+                var result = await InvokeActionAndResultFilters(method, controller, actionContext, filters, filterList, arguments);
                 return new ResourceExecutedContext(actionContext, filterList) { Result = result as IActionResult ?? new ObjectResult(result) };
             }
             var executing = new ResourceExecutingContext(actionContext, filterList, new List<Microsoft.AspNetCore.Mvc.ModelBinding.IValueProviderFactory>());
@@ -142,11 +144,11 @@ internal sealed class GrpcEmbedService
         return (await Next(0)).Result;
     }
 
-    private static async Task<object?> InvokeActionAndResultFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, object?[] arguments, IActionResult? shortCircuit = null)
+    private static async Task<object?> InvokeActionAndResultFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, IList<IFilterMetadata> filterList, object?[] arguments, IActionResult? shortCircuit = null)
     {
         var dictionary = new Dictionary<string, object?>(method.Arguments.Length, StringComparer.Ordinal);
         for (var i = 0; i < method.Arguments.Length; i++) dictionary.Add(method.Arguments[i].Parameter.Name!, arguments[i]);
-        var executing = new ActionExecutingContext(actionContext, filters.ToList(), dictionary, controller);
+        var executing = new ActionExecutingContext(actionContext, filterList, dictionary, controller);
         async Task<ActionExecutedContext> Next(int index)
         {
             while (index < filters.Length && filters[index] is not IActionFilter && filters[index] is not IAsyncActionFilter) index++;
@@ -154,39 +156,39 @@ internal sealed class GrpcEmbedService
             {
                 for (var i = 0; i < arguments.Length; i++) arguments[i] = dictionary[method.Arguments[i].Parameter.Name!];
                 var value = await method.AwaitResult(method.Invoke(controller, arguments));
-                return new ActionExecutedContext(actionContext, filters.ToList(), controller) { Result = value as IActionResult ?? new ObjectResult(value) };
+                return new ActionExecutedContext(actionContext, filterList, controller) { Result = value as IActionResult ?? new ObjectResult(value) };
             }
             if (filters[index] is IAsyncActionFilter asyncFilter)
             {
                 ActionExecutedContext? completed = null;
                 await asyncFilter.OnActionExecutionAsync(executing, async () => completed = await Next(index + 1));
-                return completed ?? new ActionExecutedContext(actionContext, filters.ToList(), controller) { Canceled = true, Result = executing.Result };
+                return completed ?? new ActionExecutedContext(actionContext, filterList, controller) { Canceled = true, Result = executing.Result };
             }
             if (filters[index] is IActionFilter filter)
             {
                 filter.OnActionExecuting(executing);
-                if (executing.Result is not null) return new ActionExecutedContext(actionContext, filters.ToList(), controller) { Canceled = true, Result = executing.Result };
+                if (executing.Result is not null) return new ActionExecutedContext(actionContext, filterList, controller) { Canceled = true, Result = executing.Result };
                 var completed = await Next(index + 1); filter.OnActionExecuted(completed); return completed;
             }
             return await Next(index + 1);
         }
         var actionResult = shortCircuit ?? (await Next(0)).Result;
         if (actionResult is null) return null;
-        var resultExecuting = new ResultExecutingContext(actionContext, filters.ToList(), actionResult, controller);
+        var resultExecuting = new ResultExecutingContext(actionContext, filterList, actionResult, controller);
         async Task<ResultExecutedContext> ResultNext(int index)
         {
             while (index < filters.Length && filters[index] is not IResultFilter && filters[index] is not IAsyncResultFilter) index++;
-            if (index == filters.Length) return new ResultExecutedContext(actionContext, filters.ToList(), resultExecuting.Result, controller);
+            if (index == filters.Length) return new ResultExecutedContext(actionContext, filterList, resultExecuting.Result, controller);
             if (filters[index] is IAsyncResultFilter asyncFilter)
             {
                 ResultExecutedContext? completed = null;
                 await asyncFilter.OnResultExecutionAsync(resultExecuting, async () => completed = await ResultNext(index + 1));
-                return completed ?? new ResultExecutedContext(actionContext, filters.ToList(), resultExecuting.Result, controller) { Canceled = true };
+                return completed ?? new ResultExecutedContext(actionContext, filterList, resultExecuting.Result, controller) { Canceled = true };
             }
             if (filters[index] is IResultFilter filter)
             {
                 filter.OnResultExecuting(resultExecuting);
-                if (resultExecuting.Cancel) return new ResultExecutedContext(actionContext, filters.ToList(), resultExecuting.Result, controller) { Canceled = true };
+                if (resultExecuting.Cancel) return new ResultExecutedContext(actionContext, filterList, resultExecuting.Result, controller) { Canceled = true };
                 var completed = await ResultNext(index + 1); filter.OnResultExecuted(completed); return completed;
             }
             return await ResultNext(index + 1);
