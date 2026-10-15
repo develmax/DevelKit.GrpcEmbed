@@ -62,7 +62,7 @@ internal sealed class GrpcEmbedService
                 };
             }
             Validate(arguments, method.Arguments);
-            var filters = method.Action.FilterDescriptors.Select(x => x.Filter is IFilterFactory factory ? factory.CreateInstance(http.RequestServices) : x.Filter).ToArray();
+            var filters = CreateRequestFilters(method.Action.FilterDescriptors, http.RequestServices);
             // MVC contexts share one mutable list within the request. The execution
             // array remains stable even if a filter annotates that contextual list.
             var filterList = filters.ToList();
@@ -99,6 +99,18 @@ internal sealed class GrpcEmbedService
         catch (OperationCanceledException) { throw new RpcException(new Status(StatusCode.Cancelled, "Request cancelled.")); }
         catch (Exception ex) { _logger.LogError(ex, "GrpcEmbed MVC action {Action} failed.", method.Action.DisplayName); throw new RpcException(new Status(StatusCode.Internal, _options.EnableDetailedErrors ? ex.Message : "The MVC action failed.")); }
         finally { _controllers.ReleaseController(controllerContext, controller); }
+    }
+
+    internal static IFilterMetadata[] CreateRequestFilters(IList<FilterDescriptor> descriptors, IServiceProvider services)
+    {
+        if (descriptors.Count == 0) return Array.Empty<IFilterMetadata>();
+        var filters = new IFilterMetadata[descriptors.Count];
+        for (var i = 0; i < filters.Length; i++)
+        {
+            var filter = descriptors[i].Filter;
+            filters[i] = filter is IFilterFactory factory ? factory.CreateInstance(services) : filter;
+        }
+        return filters;
     }
 
     private static async Task<object?> InvokeWithActionFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, IList<IFilterMetadata> filterList, object?[] arguments)
