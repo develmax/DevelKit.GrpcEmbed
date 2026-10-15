@@ -114,7 +114,7 @@ internal sealed class ClientRoute
                 Configured: configured, Fallback: fallback, Optional: spec.EndsWith('?'), CatchAll: spec.StartsWith("**", StringComparison.Ordinal));
         }).ToArray();
         var prefix = "/" + (mount.Trim('/').Length == 0 ? "" : mount.Trim('/') + "/");
-        return args =>
+        Func<object?[], string> render = args =>
         {
             var path = new System.Text.StringBuilder(_template.Length + 32);
             var position = 0;
@@ -140,6 +140,47 @@ internal sealed class ClientRoute
             var result = path.ToString().Trim('/');
             if (result.Contains('{') || result.Contains('}')) throw new NotSupportedException("Unsupported route template.");
             return prefix + result;
+        };
+        // Most GET routes have one varying scalar (for example pfpId), while
+        // version/mount are fixed by the loaded contract. Compile those literal
+        // parts once rather than allocating a builder and an intermediate path
+        // for every RPC. Retain the general renderer for all corner cases.
+        var dynamicBindings = bindings.Where(binding => binding.Argument >= 0).ToArray();
+        if (dynamicBindings.Length != 1 || dynamicBindings[0].Optional || dynamicBindings[0].CatchAll ||
+            !RequestSerialization.IsScalar(parameters[dynamicBindings[0].Argument].ParameterType)) return render;
+        var left = new System.Text.StringBuilder(prefix);
+        var right = new System.Text.StringBuilder();
+        var destination = left;
+        var offset = 0;
+        foreach (var binding in bindings)
+        {
+            var literal = _template.AsSpan(offset, binding.Index - offset);
+            if (literal.Contains('{') || literal.Contains('}')) return render;
+            destination.Append(literal);
+            if (binding.Argument >= 0) destination = right;
+            else
+            {
+                var value = binding.Configured ?? binding.Fallback;
+                if (string.IsNullOrEmpty(value) || binding.CatchAll || value is "." or ".." ||
+                    value.Contains('/') && value.Split('/').Any(segment => segment is "." or "..")) return render;
+                destination.Append(Uri.EscapeDataString(value));
+            }
+            offset = binding.Index + binding.Length;
+        }
+        var tail = _template.AsSpan(offset);
+        if (tail.Contains('{') || tail.Contains('}')) return render;
+        right.Append(tail);
+        var before = left.ToString();
+        var after = right.ToString().TrimEnd('/');
+        var dynamicBinding = dynamicBindings[0];
+        return args =>
+        {
+            var value = args[dynamicBinding.Argument] is null ? dynamicBinding.Fallback
+                : Convert.ToString(args[dynamicBinding.Argument], CultureInfo.InvariantCulture);
+            if (string.IsNullOrEmpty(value)) return render(args);
+            if (value is "." or ".." || value.Contains('/') && value.Split('/').Any(segment => segment is "." or ".."))
+                throw new InvalidOperationException("Dot path segments are not supported.");
+            return string.Concat(before, Uri.EscapeDataString(value), after);
         };
     }
 

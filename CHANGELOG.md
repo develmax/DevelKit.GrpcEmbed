@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+- Pre-bind fixed URL parts for REST-compatible gRPC routes with one varying scalar. Avoid the per-call path builder and intermediate path string; preserve escaping, dot-segment rejection, default/empty/optional handling and general-route fallback. Cache only route plans, never argument values, DTOs, tokens or responses. No wire, schema, authorization, audit or masking changes; no universal end-to-end latency gain is claimed.
+
 ## 4.0.5 — 2026-10-15
 
 - Reuse one request-local MVC filter-context list instead of copying it for each authorization/resource/action/result context. Keep the execution order stable and preserve parallel-request isolation, short circuits and exception handling.
