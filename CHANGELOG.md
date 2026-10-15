@@ -4,6 +4,7 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+- Read the private per-call route header without materializing its values array or LINQ enumerator. Preserve exact single-value checks, URL restrictions, configured authority, cancellation and private-header removal. No wire, authorization or audit behavior changes; this reduces a small routing allocation, not a claimed business-latency speedup.
 - Pre-bind fixed URL parts for REST-compatible gRPC routes with one varying scalar. Avoid the per-call path builder and intermediate path string; preserve escaping, dot-segment rejection, default/empty/optional handling and general-route fallback. Cache only route plans, never argument values, DTOs, tokens or responses. No wire, schema, authorization, audit or masking changes; no universal end-to-end latency gain is claimed.
 
 ## 4.0.5 — 2026-10-15

@@ -31,9 +31,11 @@ internal static class GrpcEmbedChannelFactory
         public RoutedTransport(HttpClient client, bool ownsClient, Uri origin) { _client = client; _ownsClient = ownsClient; _origin = origin.GetLeftPart(UriPartial.Authority); }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
-            if (!request.Headers.TryGetValues(PathHeader, out var values))
+            if (!request.Headers.NonValidated.TryGetValues(PathHeader, out var values))
                 throw new InvalidOperationException("Missing internal route address.");
-            var path = values.Single();
+            if (values.Count != 1)
+                throw new InvalidOperationException("Expected one internal route address.");
+            var path = values.ToString();
             request.Headers.Remove(PathHeader);
             if (!path.StartsWith('/') || path.StartsWith("//", StringComparison.Ordinal) || path.Contains('\\') || path.Contains('#') || path.Contains('?'))
                 throw new InvalidOperationException("Invalid internal route address.");
