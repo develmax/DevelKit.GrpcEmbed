@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>2.1.2</Version>
+    <Version>4.0.5</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Restore omitted empty repeated, string and byte values in successful wrapped gRPC responses. Preserve errors for genuine null MVC results. Client-only fix; protobuf field numbers and schema hashes are unchanged and 2.1.1 servers remain compatible. See CHANGELOG.md and docs/runtime-clients.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Reuse one request-local MVC filter-context list while keeping filter execution order stable. Bind successful client operation and model-shape resolution to the exact loaded contract snapshot; revalidate after refresh. Preserve parallel-request isolation, authorization, short circuits, exceptions, argument mutation, the 4.0.x wire format, audit and masking integrations. See CHANGELOG.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -25,6 +25,8 @@
   </PropertyGroup>
   <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)MIGRATING-4.0.md" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)CHANGELOG.md" Pack="true" PackagePath="/" Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)assets\grpcembed-icon.png" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
 </Project>

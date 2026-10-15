@@ -15,9 +15,10 @@ internal static class GrpcEmbedChannelFactory
             });
         if (options.HttpClient is null || options.HttpHandler is not null)
             throw new InvalidOperationException("URL routing requires a configured HttpClient and no separate HttpHandler.");
-        return GrpcChannel.ForAddress(new Uri(options.Address.GetLeftPart(UriPartial.Authority)), new GrpcChannelOptions
+        var origin = new Uri(options.Address.GetLeftPart(UriPartial.Authority));
+        return GrpcChannel.ForAddress(origin, new GrpcChannelOptions
         {
-            HttpHandler = new RoutedTransport(options.HttpClient, options.DisposeHttpClient),
+            HttpHandler = new RoutedTransport(options.HttpClient, options.DisposeHttpClient, origin),
             DisposeHttpClient = true,
         });
     }
@@ -26,7 +27,8 @@ internal static class GrpcEmbedChannelFactory
     {
         private readonly HttpClient _client;
         private readonly bool _ownsClient;
-        public RoutedTransport(HttpClient client, bool ownsClient) { _client = client; _ownsClient = ownsClient; }
+        private readonly string _origin;
+        public RoutedTransport(HttpClient client, bool ownsClient, Uri origin) { _client = client; _ownsClient = ownsClient; _origin = origin.GetLeftPart(UriPartial.Authority); }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
             if (!request.Headers.TryGetValues(PathHeader, out var values))
@@ -35,7 +37,7 @@ internal static class GrpcEmbedChannelFactory
             request.Headers.Remove(PathHeader);
             if (!path.StartsWith('/') || path.StartsWith("//", StringComparison.Ordinal) || path.Contains('\\') || path.Contains('#') || path.Contains('?'))
                 throw new InvalidOperationException("Invalid internal route address.");
-            request.RequestUri = new Uri(request.RequestUri!.GetLeftPart(UriPartial.Authority) + path);
+            request.RequestUri = new Uri(_origin + path);
             return _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
         }
         protected override void Dispose(bool disposing)

@@ -1,6 +1,29 @@
 syntax = "proto3";
 package GrpcEmbed;
 option csharp_namespace = "GrpcEmbed.Tests.Generated";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+enum WireState { WIRESTATE_UNKNOWN = 0; WIRESTATE_ACTIVE = 1; }
+message WireFixture {
+  string id = 1;
+  string optional_id = 2;
+  string amount = 3;
+  google.protobuf.Timestamp at = 4;
+  google.protobuf.Duration elapsed = 5;
+  string offset_at = 6;
+  WireStates states = 7;
+  WireValues values = 8;
+  WireIds ids = 9;
+}
+message WireStates { repeated WireStateItem items = 1; }
+message WireStateItem { optional WireState value = 1; }
+message WireValues { repeated WireValueItem items = 1; }
+message WireValueItem { optional int32 value = 1; }
+message WireIds { repeated WireIdItem items = 1; }
+message WireIdItem { optional string value = 1; }
+message Wire_Echo_Request { WireFixture request = 347691040; }
+service Wire { rpc Echo (Wire_Echo_Request) returns (WireFixture); }
 
 message Users_Get_Request { int32 id = 121987495; }
 message Users_Missing_Request { int32 id = 121987495; }

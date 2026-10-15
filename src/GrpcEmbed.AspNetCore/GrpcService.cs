@@ -29,6 +29,12 @@ internal sealed class GrpcEmbedService
     {
         var http = call.GetHttpContext();
         http.GetEndpoint()?.Metadata.GetMetadata<GrpcEmbedRouteMetadata>()?.Validate(http, request);
+        if (http.Items.TryGetValue(GrpcEmbedPayloadAuditContract.RequestObserverKey, out var observer) && observer is Action<object?, string?> audit)
+        {
+            var contract = http.GetEndpoint()?.Metadata.GetMetadata<GrpcEmbedPayloadAuditContract>()
+                ?? throw new InvalidOperationException("The endpoint has no payload audit contract.");
+            audit(contract.ProjectRequestBody(request), contract.HttpMethod);
+        }
         // Queue metadata without starting the response. MVC actions, filters, and OnStarting
         // callbacks must still be able to add headers before Grpc.AspNetCore writes the result.
         if (_options.Contract.Enabled && _options.Contract.Hash.Enabled && _options.Contract.Hash.SendInResponses)
@@ -57,14 +63,17 @@ internal sealed class GrpcEmbedService
             }
             Validate(arguments, method.Arguments);
             var filters = method.Action.FilterDescriptors.Select(x => x.Filter is IFilterFactory factory ? factory.CreateInstance(http.RequestServices) : x.Filter).ToArray();
+            // MVC contexts share one mutable list within the request. The execution
+            // array remains stable even if a filter annotates that contextual list.
+            var filterList = filters.ToList();
             object? raw = null;
             try
             {
-                raw = await InvokeWithActionFilters(method, controller, actionContext, filters, arguments);
+                raw = await InvokeWithActionFilters(method, controller, actionContext, filters, filterList, arguments);
             }
             catch (Exception exception)
             {
-                var exceptionContext = new ExceptionContext(actionContext, filters) { Exception = exception };
+                var exceptionContext = new ExceptionContext(actionContext, filterList) { Exception = exception };
                 foreach (var filter in filters.AsEnumerable().Reverse())
                 {
                     if (filter is IAsyncExceptionFilter asyncFilter) await asyncFilter.OnExceptionAsync(exceptionContext);
@@ -73,7 +82,9 @@ internal sealed class GrpcEmbedService
                 if (!exceptionContext.ExceptionHandled) throw;
                 raw = exceptionContext.Result;
             }
-            raw = UnwrapActionResult(raw, _options);
+            raw = UnwrapActionResult(raw, _options, method.ResultReader);
+            if (http.Items.ContainsKey(GrpcEmbedPayloadAuditContract.CaptureResponseKey))
+                http.Items[GrpcEmbedPayloadAuditContract.ResponseKey] = raw;
             if (typeof(TResponse) == typeof(GrpcEmbedEmpty))
             {
                 if (raw is not null)
@@ -90,9 +101,8 @@ internal sealed class GrpcEmbedService
         finally { _controllers.ReleaseController(controllerContext, controller); }
     }
 
-    private static async Task<object?> InvokeWithActionFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, object?[] arguments)
+    private static async Task<object?> InvokeWithActionFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, IList<IFilterMetadata> filterList, object?[] arguments)
     {
-        var filterList = filters.ToList();
         var authorization = new AuthorizationFilterContext(actionContext, filterList);
         foreach (var filter in filters)
         {
@@ -100,13 +110,18 @@ internal sealed class GrpcEmbedService
             else if (filter is IAuthorizationFilter syncAuthorization) syncAuthorization.OnAuthorization(authorization);
             if (authorization.Result is not null) break;
         }
-        if (authorization.Result is not null) return await InvokeActionAndResultFilters(method, controller, actionContext, filters, arguments, authorization.Result);
+        if (authorization.Result is not null) return await InvokeActionAndResultFilters(method, controller, actionContext, filters, filterList, arguments, authorization.Result);
+        if (!filters.Any(filter => filter is IResourceFilter or IAsyncResourceFilter))
+            return await InvokeActionAndResultFilters(method, controller, actionContext, filters, filterList, arguments);
 
         async Task<ResourceExecutedContext> Next(int index)
         {
+            // Unrelated filter categories have no work at this stage. Skip them
+            // in-place instead of allocating a recursive async frame for each.
+            while (index < filters.Length && filters[index] is not IResourceFilter && filters[index] is not IAsyncResourceFilter) index++;
             if (index == filters.Length)
             {
-                var result = await InvokeActionAndResultFilters(method, controller, actionContext, filters, arguments);
+                var result = await InvokeActionAndResultFilters(method, controller, actionContext, filters, filterList, arguments);
                 return new ResourceExecutedContext(actionContext, filterList) { Result = result as IActionResult ?? new ObjectResult(result) };
             }
             var executing = new ResourceExecutingContext(actionContext, filterList, new List<Microsoft.AspNetCore.Mvc.ModelBinding.IValueProviderFactory>());
@@ -129,48 +144,51 @@ internal sealed class GrpcEmbedService
         return (await Next(0)).Result;
     }
 
-    private static async Task<object?> InvokeActionAndResultFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, object?[] arguments, IActionResult? shortCircuit = null)
+    private static async Task<object?> InvokeActionAndResultFilters(RuntimeMethod method, object controller, ActionContext actionContext, IFilterMetadata[] filters, IList<IFilterMetadata> filterList, object?[] arguments, IActionResult? shortCircuit = null)
     {
-        var dictionary = method.Action.MethodInfo.GetParameters().Select((p, i) => (p.Name!, arguments[i])).ToDictionary(x => x.Item1, x => x.Item2);
-        var executing = new ActionExecutingContext(actionContext, filters.ToList(), dictionary, controller);
+        var dictionary = new Dictionary<string, object?>(method.Arguments.Length, StringComparer.Ordinal);
+        for (var i = 0; i < method.Arguments.Length; i++) dictionary.Add(method.Arguments[i].Parameter.Name!, arguments[i]);
+        var executing = new ActionExecutingContext(actionContext, filterList, dictionary, controller);
         async Task<ActionExecutedContext> Next(int index)
         {
+            while (index < filters.Length && filters[index] is not IActionFilter && filters[index] is not IAsyncActionFilter) index++;
             if (index == filters.Length)
             {
-                for (var i = 0; i < arguments.Length; i++) arguments[i] = dictionary[method.Action.MethodInfo.GetParameters()[i].Name!];
-                var value = await AwaitResult(method.Invoke(controller, arguments), method.Action.MethodInfo.ReturnType);
-                return new ActionExecutedContext(actionContext, filters.ToList(), controller) { Result = value as IActionResult ?? new ObjectResult(value) };
+                for (var i = 0; i < arguments.Length; i++) arguments[i] = dictionary[method.Arguments[i].Parameter.Name!];
+                var value = await method.AwaitResult(method.Invoke(controller, arguments));
+                return new ActionExecutedContext(actionContext, filterList, controller) { Result = value as IActionResult ?? new ObjectResult(value) };
             }
             if (filters[index] is IAsyncActionFilter asyncFilter)
             {
                 ActionExecutedContext? completed = null;
                 await asyncFilter.OnActionExecutionAsync(executing, async () => completed = await Next(index + 1));
-                return completed ?? new ActionExecutedContext(actionContext, filters.ToList(), controller) { Canceled = true, Result = executing.Result };
+                return completed ?? new ActionExecutedContext(actionContext, filterList, controller) { Canceled = true, Result = executing.Result };
             }
             if (filters[index] is IActionFilter filter)
             {
                 filter.OnActionExecuting(executing);
-                if (executing.Result is not null) return new ActionExecutedContext(actionContext, filters.ToList(), controller) { Canceled = true, Result = executing.Result };
+                if (executing.Result is not null) return new ActionExecutedContext(actionContext, filterList, controller) { Canceled = true, Result = executing.Result };
                 var completed = await Next(index + 1); filter.OnActionExecuted(completed); return completed;
             }
             return await Next(index + 1);
         }
         var actionResult = shortCircuit ?? (await Next(0)).Result;
         if (actionResult is null) return null;
-        var resultExecuting = new ResultExecutingContext(actionContext, filters.ToList(), actionResult, controller);
+        var resultExecuting = new ResultExecutingContext(actionContext, filterList, actionResult, controller);
         async Task<ResultExecutedContext> ResultNext(int index)
         {
-            if (index == filters.Length) return new ResultExecutedContext(actionContext, filters.ToList(), resultExecuting.Result, controller);
+            while (index < filters.Length && filters[index] is not IResultFilter && filters[index] is not IAsyncResultFilter) index++;
+            if (index == filters.Length) return new ResultExecutedContext(actionContext, filterList, resultExecuting.Result, controller);
             if (filters[index] is IAsyncResultFilter asyncFilter)
             {
                 ResultExecutedContext? completed = null;
                 await asyncFilter.OnResultExecutionAsync(resultExecuting, async () => completed = await ResultNext(index + 1));
-                return completed ?? new ResultExecutedContext(actionContext, filters.ToList(), resultExecuting.Result, controller) { Canceled = true };
+                return completed ?? new ResultExecutedContext(actionContext, filterList, resultExecuting.Result, controller) { Canceled = true };
             }
             if (filters[index] is IResultFilter filter)
             {
                 filter.OnResultExecuting(resultExecuting);
-                if (resultExecuting.Cancel) return new ResultExecutedContext(actionContext, filters.ToList(), resultExecuting.Result, controller) { Canceled = true };
+                if (resultExecuting.Cancel) return new ResultExecutedContext(actionContext, filterList, resultExecuting.Result, controller) { Canceled = true };
                 var completed = await ResultNext(index + 1); filter.OnResultExecuted(completed); return completed;
             }
             return await ResultNext(index + 1);
@@ -178,23 +196,12 @@ internal sealed class GrpcEmbedService
         return (await ResultNext(0)).Result;
     }
 
-    private static async Task<object?> AwaitResult(object? pending, Type declaredReturnType)
-    {
-        if (pending is Task task) { await task.ConfigureAwait(false); return declaredReturnType == typeof(Task) ? null : task.GetType().GetProperty("Result")!.GetValue(task); }
-        if (pending is ValueTask valueTask) { await valueTask.ConfigureAwait(false); return null; }
-        if (pending is not null && pending.GetType().IsValueType && pending.GetType().IsGenericType && pending.GetType().GetGenericTypeDefinition() == typeof(ValueTask<>))
-        {
-            var convertedTask = (Task)pending.GetType().GetMethod("AsTask")!.Invoke(pending, null)!; await convertedTask.ConfigureAwait(false); return convertedTask.GetType().GetProperty("Result")!.GetValue(convertedTask);
-        }
-        return pending;
-    }
-
-    private static object? UnwrapActionResult(object? raw, GrpcEmbedOptions options)
+    internal static object? UnwrapActionResult(object? raw, GrpcEmbedOptions options, MvcResultReaders.Reader? prepared = null)
     {
         if (raw is ObjectResult objectResult)
         {
             if (objectResult.StatusCode is { } status && status >= 300) throw StatusException(status, objectResult.Value?.ToString(), options);
-            return UnwrapActionResult(objectResult.Value, options);
+            return UnwrapActionResult(objectResult.Value, options, prepared);
         }
         if (raw is StatusCodeResult statusResult)
         {
@@ -204,8 +211,9 @@ internal sealed class GrpcEmbedService
         if (raw is IActionResult result) throw new RpcException(new Status(StatusCode.Unimplemented, $"MVC result {result.GetType().Name} is not supported."));
         if (raw is not null && raw.GetType().IsGenericType && raw.GetType().GetGenericTypeDefinition() == typeof(ActionResult<>))
         {
-            var innerResult = raw.GetType().GetProperty("Result")!.GetValue(raw);
-            return innerResult is null ? raw.GetType().GetProperty("Value")!.GetValue(raw) : UnwrapActionResult(innerResult, options);
+            var readers = prepared?.Type == raw.GetType() ? prepared : MvcResultReaders.Get(raw.GetType());
+            var innerResult = readers.Result(raw);
+            return innerResult is null ? readers.Value(raw) : UnwrapActionResult(innerResult, options, prepared);
         }
         return raw;
     }
@@ -226,15 +234,20 @@ internal sealed class GrpcEmbedService
         GrpcEmbedStatusCode.Unauthenticated => StatusCode.Unauthenticated, GrpcEmbedStatusCode.Unavailable => StatusCode.Unavailable, _ => StatusCode.Internal
     };
 
-    private static void Validate(object?[] arguments, RuntimeArgument[] parameters)
+    internal static void Validate(object?[] arguments, RuntimeArgument[] parameters)
     {
         var errors = new List<ValidationResult>();
         for (var i = 0; i < arguments.Length; i++)
         {
             if (parameters[i].Source == RuntimeArgumentSource.CancellationToken) continue;
             var parameter = parameters[i].Parameter;
-            var parameterContext = new ValidationContext(arguments[i] ?? new object()) { MemberName = parameter.Name, DisplayName = parameter.Name ?? "parameter" };
-            Validator.TryValidateValue(arguments[i]!, parameterContext, errors, parameters[i].ValidationAttributes);
+            // No parameter validators means there is nothing to invoke here. Object
+            // property/type/IValidatableObject validation below is still mandatory.
+            if (parameters[i].ValidationAttributes.Count != 0)
+            {
+                var parameterContext = new ValidationContext(arguments[i] ?? new object()) { MemberName = parameter.Name, DisplayName = parameter.Name ?? "parameter" };
+                Validator.TryValidateValue(arguments[i]!, parameterContext, errors, parameters[i].ValidationAttributes);
+            }
             if (arguments[i] is not null) Validator.TryValidateObject(arguments[i]!, new ValidationContext(arguments[i]!), errors, true);
         }
         if (errors.Count > 0) throw new RpcException(new Status(StatusCode.InvalidArgument, string.Join("; ", errors.Select(x => x.ErrorMessage))));
@@ -256,7 +269,14 @@ internal sealed class GrpcEmbedMethodProvider : IServiceMethodProvider<GrpcEmbed
         where TRequest : class where TResponse : class
     {
         var method = new Method<TRequest, TResponse>(MethodType.Unary, "GrpcEmbed." + runtime.ServiceName, runtime.MethodName, Marshaller<TRequest>(), Marshaller<TResponse>());
-        var metadata = runtime.Action.EndpointMetadata.Where(x => x is not Microsoft.AspNetCore.Routing.IHttpMethodMetadata).ToArray();
+        var bodyParameter = runtime.Action.Parameters.OfType<ControllerParameterDescriptor>()
+            .SingleOrDefault(p => p.BindingInfo?.BindingSource?.Id == "Body");
+        var bodyIndex = bodyParameter is null ? -1 : Array.FindIndex(runtime.Parameters.ToArray(), p => p == bodyParameter.ParameterInfo);
+        var verb = SchemaManifestManager.GetRoute(runtime).HttpMethods.FirstOrDefault();
+        var auditContract = new GrpcEmbedPayloadAuditContract(
+            value => bodyIndex < 0 ? null : runtime.RequestReaders[bodyIndex](value), verb);
+        var metadata = runtime.Action.EndpointMetadata.Where(x => x is not Microsoft.AspNetCore.Routing.IHttpMethodMetadata)
+            .Append(auditContract).ToArray();
         context.AddUnaryMethod(method, metadata, (service, request, call) => service.Invoke<TRequest, TResponse>(runtime, request, call));
     }
 
