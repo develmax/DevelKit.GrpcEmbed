@@ -37,7 +37,7 @@ internal static class GrpcEmbedChannelFactory
                 throw new InvalidOperationException("Expected one internal route address.");
             var path = values.ToString();
             request.Headers.Remove(PathHeader);
-            if (!path.StartsWith('/') || path.StartsWith("//", StringComparison.Ordinal) || path.Contains('\\') || path.Contains('#') || path.Contains('?'))
+            if (path.AsSpan().IndexOfAny('\r', '\n') >= 0 || !path.StartsWith('/') || path.StartsWith("//", StringComparison.Ordinal) || path.Contains('\\') || path.Contains('#') || path.Contains('?'))
                 throw new InvalidOperationException("Invalid internal route address.");
             request.RequestUri = new Uri(_origin + path);
             return _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);

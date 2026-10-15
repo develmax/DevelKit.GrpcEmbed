@@ -36,6 +36,9 @@ public sealed class RoutedTransportTests
     [InlineData("/api\\bad")]
     [InlineData("/api#bad")]
     [InlineData("/api?bad")]
+    [InlineData("/api/\r\nbad")]
+    [InlineData("/api/\rbad")]
+    [InlineData("/api/\nbad")]
     public async Task Invalid_route_never_reaches_transport(string path)
     {
         using var terminal = new Terminal();
