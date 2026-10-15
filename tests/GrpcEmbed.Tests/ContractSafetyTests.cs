@@ -22,6 +22,7 @@ public sealed class ContractSafetyTests : IClassFixture<WebApplicationFactory<Pr
     [Theory]
     [InlineData(null)]
     [InlineData("old-contract")]
+    [InlineData("3.x-collection-wire-contract")]
     public async Task Required_hash_rejects_even_malformed_body_before_action(string? hash)
     {
         using var server = Server(GrpcEmbedContractValidation.Required);

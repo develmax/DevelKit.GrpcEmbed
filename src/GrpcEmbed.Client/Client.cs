@@ -11,6 +11,8 @@ namespace GrpcEmbed.Client;
 
 public sealed class GrpcEmbedClientOptions
 {
+    /// <summary>Expose decoded per-call bodies to a custom HTTP audit adapter. No payloads are logged automatically.</summary>
+    public bool CaptureAuditPayloads { get; set; }
     public GrpcEmbedClientRoutingOptions Routing { get; set; } = new();
     public GrpcEmbedClientContractOptions Contract { get; set; } = new();
     internal bool RequireHttp2ForContract { get; set; }
@@ -118,6 +120,8 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
     private ClientContractState _contractState = null!;
     private readonly Dictionary<MethodInfo, Func<object?[]?, object>> _calls = new();
     private readonly Dictionary<MethodInfo, GrpcEmbedOperation> _operations = new();
+    private sealed record BoundCall<TRequest, TWireResponse>(ClientContractState.PreparedContract? Contract,
+        Method<TRequest, TWireResponse> Method, string Operation, Func<object?[], string>? Path);
 
     public static TContract Create(CallInvoker invoker, GrpcEmbedClientOptions options)
     {
@@ -203,65 +207,83 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
             service = operation.Service;
             methodName = operation.Method;
         }
-        var method = new Method<TRequest, TWireResponse>(MethodType.Unary, "GrpcEmbed." + service, methodName, Marshaller<TRequest>(), Marshaller<TWireResponse>());
+        var measureRequest = parameters.All(p => RequestSerialization.IsScalar(p.ParameterType));
+        var method = new Method<TRequest, TWireResponse>(MethodType.Unary, "GrpcEmbed." + service, methodName, Marshaller<TRequest>(measureRequest), Marshaller<TWireResponse>());
         if (_options.Contract.Fetch != GrpcEmbedContractFetch.Never)
         {
             _ = ContractShapeCache<TRequest>.Hash;
             _ = ContractShapeCache<TWireResponse>.Hash;
         }
         var returnsValueTask = contract.ReturnType.IsGenericType && contract.ReturnType.GetGenericTypeDefinition() == typeof(ValueTask<>);
+        var requestFactory = ClientRequestFactories<TRequest>.Build(parameters);
+        if (_options.CaptureAuditPayloads) ClientAuditBody<TRequest>.Initialize();
+        var contractService = _options.ServiceName is null && serviceAttribute is null && _options.OperationResolver is null
+            ? null : method.ServiceName;
+        var prepareContract = _options.Contract.Fetch == GrpcEmbedContractFetch.Never ? null :
+            _contractState.Bind(contractService, method.Name, ContractShapeCache<TRequest>.Hash, ContractShapeCache<TWireResponse>.Hash);
+        BoundCall<TRequest, TWireResponse>? boundCall = null;
+        BoundCall<TRequest, TWireResponse> ResolveCall(ClientContractState.PreparedContract? prepared)
+        {
+            var current = Volatile.Read(ref boundCall);
+            if (current is null || !ReferenceEquals(current.Contract, prepared))
+            {
+                var activeMethod = prepared is not null && prepared.Service != method.ServiceName
+                    ? ResolvedContractMethods<TRequest, TWireResponse>.Get(method, prepared.Service) : method;
+                var path = _options.Routing.Mode == GrpcEmbedRoutingMode.Native || prepared is null ? null
+                    : ClientRoute.Bind(_options, prepared.Route, prepared.Service, method.Name, parameters);
+                current = new BoundCall<TRequest, TWireResponse>(prepared, activeMethod,
+                    activeMethod.ServiceName + "/" + activeMethod.Name, path);
+                Volatile.Write(ref boundCall, current);
+            }
+            return current;
+        }
         return args =>
         {
-            var task = CallCore<TRequest, TWireResponse, TResponse>(method, parameters, args ?? Array.Empty<object?>());
+            var task = CallCore<TRequest, TWireResponse, TResponse>(parameters.Length, prepareContract,
+                requestFactory, ResolveCall, args ?? Array.Empty<object?>());
             if (contract.ReturnType == typeof(ValueTask)) return new ValueTask(task);
             return returnsValueTask ? new ValueTask<TResponse>(task) : task;
         };
     }
 
-    private async Task<TResponse> CallCore<TRequest, TWireResponse, TResponse>(Method<TRequest, TWireResponse> method, ParameterInfo[] parameters, object?[] args) where TRequest : class where TWireResponse : class
+    private async Task<TResponse> CallCore<TRequest, TWireResponse, TResponse>(int parameterCount,
+        Func<CancellationToken, DateTime?, ValueTask<ClientContractState.PreparedContract?>>? prepareContract, Func<object?[], TRequest> requestFactory,
+        Func<ClientContractState.PreparedContract?, BoundCall<TRequest, TWireResponse>> resolveCall, object?[] args) where TRequest : class where TWireResponse : class
     {
-        var request = ClientRequestFactories<TRequest>.Create(parameters, args);
-        var cancellation = contractCancellation(parameters.Length, args);
-        using var timeoutSource = _options.Contract.Fetch == GrpcEmbedContractFetch.Never
-            ? null : CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        if (timeoutSource is not null && _options.DefaultTimeout is { } limit) timeoutSource.CancelAfter(limit);
-        var token = timeoutSource?.Token ?? cancellation;
+        var request = requestFactory(args);
+        var cancellation = contractCancellation(parameterCount, args);
+        var token = cancellation;
         var deadline = _options.DefaultTimeout is { } timeout ? DateTime.UtcNow + timeout : (DateTime?)null;
         for (var attempt = 0; ; attempt++)
         {
         token.ThrowIfCancellationRequested();
-        var prepared = _options.Contract.Fetch == GrpcEmbedContractFetch.Never ? null :
-            await _contractState.PrepareAsync(_options.ServiceName is null &&
-                typeof(TContract).GetCustomAttribute<GrpcNameAttribute>() is null &&
-                _options.OperationResolver is null ? null : method.ServiceName, method.Name,
-                ContractShapeCache<TRequest>.Hash, ContractShapeCache<TWireResponse>.Hash, token).ConfigureAwait(false);
+        var prepared = prepareContract is null ? null : await prepareContract(token, deadline).ConfigureAwait(false);
         var hash = prepared?.Hash;
-        var activeMethod = prepared is not null && prepared.Service != method.ServiceName
-            ? ResolvedContractMethods<TRequest, TWireResponse>.Get(method, prepared.Service) : method;
+        var bound = resolveCall(prepared);
+        var activeMethod = bound.Method;
         var metadata = _options.MetadataFactory?.Invoke();
-        if (_options.Routing.Mode != GrpcEmbedRoutingMode.Native)
-        {
-            if (prepared is null) throw new InvalidOperationException("URL routing requires a fetched contract.");
-            var operation = activeMethod.ServiceName + "/" + activeMethod.Name;
-            var path = ClientRoute.Build(_options, prepared.Route, activeMethod.ServiceName, activeMethod.Name, parameters, args);
-            var routed = new Metadata();
-            if (metadata is not null)
-                foreach (var item in metadata)
-                    if (item.Key != GrpcEmbedContractHeaders.Operation && item.Key != GrpcEmbedChannelFactory.PathHeader) routed.Add(item);
-            routed.Add(GrpcEmbedContractHeaders.Operation, operation);
-            routed.Add(GrpcEmbedChannelFactory.PathHeader, path);
-            metadata = routed;
-        }
-        if (_options.Contract.SendHash)
+        var routedCall = _options.Routing.Mode != GrpcEmbedRoutingMode.Native;
+        if (routedCall || _options.Contract.SendHash)
         {
             var guarded = new Metadata();
             if (metadata is not null)
                 foreach (var item in metadata)
-                    if (item.Key != GrpcEmbedContractHeaders.RequestHash) guarded.Add(item);
-            guarded.Add(GrpcEmbedContractHeaders.RequestHash, hash!);
+                    if ((!routedCall || item.Key != GrpcEmbedContractHeaders.Operation && item.Key != GrpcEmbedChannelFactory.PathHeader) &&
+                        (!_options.Contract.SendHash || item.Key != GrpcEmbedContractHeaders.RequestHash)) guarded.Add(item);
+            if (routedCall)
+            {
+                if (prepared is null) throw new InvalidOperationException("URL routing requires a fetched contract.");
+                guarded.Add(GrpcEmbedContractHeaders.Operation, bound.Operation);
+                guarded.Add(GrpcEmbedChannelFactory.PathHeader, bound.Path!(args));
+            }
+            if (_options.Contract.SendHash) guarded.Add(GrpcEmbedContractHeaders.RequestHash, hash!);
             metadata = guarded;
         }
+        using var audit = _options.CaptureAuditPayloads ? new GrpcEmbedClientPayloadAudit(
+            bound.Operation,
+            prepared is null ? request : ClientAuditBody<TRequest>.Read(request, prepared.BodyParameter), prepared?.HttpMethod) : null;
         using var call = _invoker.AsyncUnaryCall(activeMethod, null, new CallOptions(headers: metadata, deadline: deadline, cancellationToken: token), request);
+        var responseReceived = false;
         try
         {
         if (_options.ExpectedSchemaHash is not null)
@@ -272,16 +294,25 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
                 throw new RpcException(new Status(StatusCode.FailedPrecondition, $"GrpcEmbed schema hash mismatch. Expected '{_options.ExpectedSchemaHash}', received '{actual ?? "<missing>"}'."));
         }
         var response = await call.ResponseAsync.ConfigureAwait(false);
-        if (typeof(TWireResponse) == typeof(TResponse)) return (TResponse)(object)response;
-        return ClientResponseReaders<TWireResponse, TResponse>.Read(response);
+        responseReceived = true;
+        var result = typeof(TWireResponse) == typeof(TResponse) ? (TResponse)(object)response
+            : ClientResponseReaders<TWireResponse, TResponse>.Read(response);
+        audit?.Complete(typeof(TResponse) == typeof(GrpcEmbedEmpty) ? null : result, (int)call.GetStatus().StatusCode);
+        return result;
         }
-        catch (RpcException error) when (_options.Contract.SendHash &&
+        catch (RpcException error) when (!responseReceived && _options.Contract.SendHash &&
             _options.Contract.OnMismatch == GrpcEmbedContractMismatch.RefreshAndRetry &&
             attempt < _options.Contract.MaxRetries && error.StatusCode == StatusCode.FailedPrecondition &&
             error.Trailers.GetValue(GrpcEmbedContractHeaders.Rejection) == GrpcEmbedContractHeaders.NotExecuted &&
             error.Trailers.GetValue(GrpcEmbedContractHeaders.ServerHash) is { Length: 64 })
         {
-            await _contractState.RefreshAsync(hash, token).ConfigureAwait(false);
+            audit?.Fail(error);
+            await _contractState.RefreshAsync(hash, token, deadline).ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            audit?.Fail(error);
+            throw;
         }
         }
     }
@@ -311,26 +342,34 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
         ? typeof(GrpcEmbedEmpty)
         : type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Task<>) || type.GetGenericTypeDefinition() == typeof(ValueTask<>))
             ? type.GetGenericArguments()[0] : null;
-    private static Marshaller<T> Marshaller<T>() => Marshallers.Create<T>((value, context) => { GrpcEmbedRuntimeModel.Model.Serialize(context.GetBufferWriter(), value); context.Complete(); }, context => (T)GrpcEmbedRuntimeModel.Model.Deserialize(context.PayloadAsReadOnlySequence(), typeof(T), null, null)!);
+    private static Marshaller<T> Marshaller<T>(bool measureRequest = false) => Marshallers.Create<T>((value, context) => RequestSerialization.Write(value, context, measureRequest), context => (T)GrpcEmbedRuntimeModel.Model.Deserialize(context.PayloadAsReadOnlySequence(), typeof(T), null, null)!);
+}
+
+internal static class ClientAuditBody<TRequest> where TRequest : class
+{
+    private static readonly IReadOnlyDictionary<string, Func<TRequest, object?>> Readers = typeof(TRequest).GetProperties()
+        .ToDictionary(p => p.Name, p =>
+        {
+            var input = System.Linq.Expressions.Expression.Parameter(typeof(TRequest));
+            return System.Linq.Expressions.Expression.Lambda<Func<TRequest, object?>>(
+                System.Linq.Expressions.Expression.Convert(System.Linq.Expressions.Expression.Property(input, p), typeof(object)), input).Compile();
+        }, StringComparer.Ordinal);
+    public static void Initialize() => _ = Readers.Count;
+    public static object? Read(TRequest request, string? bodyParameter)
+        => bodyParameter is null ? null : Readers.TryGetValue(bodyParameter, out var read) ? read(request)
+            : throw new InvalidOperationException("The published audit body parameter is absent from the client contract.");
 }
 
 internal static class ClientRequestFactories<TRequest> where TRequest : class
 {
-    private static ParameterInfo[]? _parameters;
-    private static Func<object?[], TRequest>? _factory;
-    public static TRequest Create(ParameterInfo[] parameters, object?[] values)
+    public static Func<object?[], TRequest> Build(ParameterInfo[] parameters)
     {
-        if (_factory is null || !ReferenceEquals(_parameters, parameters))
-        {
             var input = System.Linq.Expressions.Expression.Parameter(typeof(object[]));
             var bindings = parameters.Select((p, i) => System.Linq.Expressions.Expression.Bind(
                 typeof(TRequest).GetProperty(p.Name!)!,
                 System.Linq.Expressions.Expression.Convert(System.Linq.Expressions.Expression.ArrayIndex(input, System.Linq.Expressions.Expression.Constant(i)), p.ParameterType)));
-            _factory = System.Linq.Expressions.Expression.Lambda<Func<object?[], TRequest>>(
+            return System.Linq.Expressions.Expression.Lambda<Func<object?[], TRequest>>(
                 System.Linq.Expressions.Expression.MemberInit(System.Linq.Expressions.Expression.New(typeof(TRequest)), bindings), input).Compile();
-            _parameters = parameters;
-        }
-        return _factory(values);
     }
 }
 

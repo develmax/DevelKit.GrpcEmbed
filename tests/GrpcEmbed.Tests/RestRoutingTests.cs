@@ -65,6 +65,21 @@ public sealed class RestRoutingTests
     }
 
     [Fact]
+    public async Task Routed_calls_keep_configured_authority_not_named_http_base_address()
+    {
+        using var server = Server();
+        using var recorder = new RecordingHandler { InnerHandler = server.Server.CreateHandler() };
+        using var http = new HttpClient(recorder) { BaseAddress = new Uri("http://localhost/api/users") };
+        using var provider = Client(http, address: new Uri("http://grpc-target:7443/api/users"));
+        var client = provider.GetRequiredService<IUsers>();
+        foreach (var id in new[] { 42, 43 })
+        {
+            Assert.Equal(id, (await client.GetAsync(id, default)).Id);
+            Assert.Equal(new Uri($"http://grpc-target:7443/api/users/{id}"), recorder.LastRpcUri);
+        }
+    }
+
+    [Fact]
     public async Task Stale_hash_is_rejected_before_deserializing_routed_body()
     {
         using var server = Server();
@@ -132,12 +147,12 @@ public sealed class RestRoutingTests
             options.Contract.Validation = GrpcEmbedContractValidation.Required;
         })));
 
-    private static ServiceProvider Client(HttpClient http, GrpcEmbedRoutingMode mode = GrpcEmbedRoutingMode.Rest)
+    private static ServiceProvider Client(HttpClient http, GrpcEmbedRoutingMode mode = GrpcEmbedRoutingMode.Rest, Uri? address = null)
     {
         var services = new ServiceCollection();
         services.AddGrpcEmbedClient<IUsers>(options =>
         {
-            options.Address = http.BaseAddress!;
+            options.Address = address ?? http.BaseAddress!;
             options.HttpClient = http;
             options.Routing.Mode = mode;
             options.ServiceName = "Users";
@@ -156,6 +171,7 @@ public sealed class RestRoutingTests
     private sealed class RecordingHandler : DelegatingHandler
     {
         public string? LastRpcPath { get; private set; }
+        public Uri? LastRpcUri { get; private set; }
         public bool TamperPath { get; init; }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
@@ -163,6 +179,7 @@ public sealed class RestRoutingTests
             {
                 Assert.False(request.Headers.Contains("grpcembed-internal-path"));
                 LastRpcPath = request.RequestUri!.AbsolutePath;
+                LastRpcUri = request.RequestUri;
                 if (TamperPath) request.RequestUri = new Uri(request.RequestUri, "/api/users/456");
             }
             return base.SendAsync(request, token);
