@@ -2,6 +2,8 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
 ## 4.0.6 — 2026-10-16
 
 - Materialize MVC filters without a per-request captured LINQ selector/iterator. Preserve descriptor order, request-scoped factory resolution, exception propagation and separate execution/context collections. An isolated .NET 6 probe saves 160 bytes per materialization; this is not a whole-request latency claim.
