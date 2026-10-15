@@ -194,7 +194,7 @@ internal sealed class GrpcEmbedService
         return (await ResultNext(0)).Result;
     }
 
-    private static object? UnwrapActionResult(object? raw, GrpcEmbedOptions options)
+    internal static object? UnwrapActionResult(object? raw, GrpcEmbedOptions options)
     {
         if (raw is ObjectResult objectResult)
         {
@@ -209,8 +209,9 @@ internal sealed class GrpcEmbedService
         if (raw is IActionResult result) throw new RpcException(new Status(StatusCode.Unimplemented, $"MVC result {result.GetType().Name} is not supported."));
         if (raw is not null && raw.GetType().IsGenericType && raw.GetType().GetGenericTypeDefinition() == typeof(ActionResult<>))
         {
-            var innerResult = raw.GetType().GetProperty("Result")!.GetValue(raw);
-            return innerResult is null ? raw.GetType().GetProperty("Value")!.GetValue(raw) : UnwrapActionResult(innerResult, options);
+            var readers = MvcResultReaders.Get(raw.GetType());
+            var innerResult = readers.Result(raw);
+            return innerResult is null ? readers.Value(raw) : UnwrapActionResult(innerResult, options);
         }
         return raw;
     }
@@ -231,15 +232,20 @@ internal sealed class GrpcEmbedService
         GrpcEmbedStatusCode.Unauthenticated => StatusCode.Unauthenticated, GrpcEmbedStatusCode.Unavailable => StatusCode.Unavailable, _ => StatusCode.Internal
     };
 
-    private static void Validate(object?[] arguments, RuntimeArgument[] parameters)
+    internal static void Validate(object?[] arguments, RuntimeArgument[] parameters)
     {
         var errors = new List<ValidationResult>();
         for (var i = 0; i < arguments.Length; i++)
         {
             if (parameters[i].Source == RuntimeArgumentSource.CancellationToken) continue;
             var parameter = parameters[i].Parameter;
-            var parameterContext = new ValidationContext(arguments[i] ?? new object()) { MemberName = parameter.Name, DisplayName = parameter.Name ?? "parameter" };
-            Validator.TryValidateValue(arguments[i]!, parameterContext, errors, parameters[i].ValidationAttributes);
+            // No parameter validators means there is nothing to invoke here. Object
+            // property/type/IValidatableObject validation below is still mandatory.
+            if (parameters[i].ValidationAttributes.Count != 0)
+            {
+                var parameterContext = new ValidationContext(arguments[i] ?? new object()) { MemberName = parameter.Name, DisplayName = parameter.Name ?? "parameter" };
+                Validator.TryValidateValue(arguments[i]!, parameterContext, errors, parameters[i].ValidationAttributes);
+            }
             if (arguments[i] is not null) Validator.TryValidateObject(arguments[i]!, new ValidationContext(arguments[i]!), errors, true);
         }
         if (errors.Count > 0) throw new RpcException(new Status(StatusCode.InvalidArgument, string.Join("; ", errors.Select(x => x.ErrorMessage))));

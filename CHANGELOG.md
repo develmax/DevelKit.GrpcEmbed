@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.0.4 — 2026-10-15
+
+- Prepare and cache typed `ActionResult<T>` result/value readers, avoiding per-response property reflection. Preserve direct values, nested MVC results, nulls and HTTP-to-gRPC error mapping.
+- Avoid creating parameter validation contexts when there are no parameter validation attributes. Object/property validation and `IValidatableObject` still run, including when no parameter attributes exist.
+- Add validation, result-shape and allocation regressions. No wire, descriptor, hash, authorization, filter or audit changes; no universal end-to-end latency improvement is claimed.
+
 ## 4.0.3 — 2026-10-15
 
 - Prepare typed MVC `Task<T>` and `ValueTask<T>` result readers during discovery instead of looking up `Result`/`AsTask` with reflection on every call. Return results with `ValueTask<object?>`, avoiding an extra result task for synchronously completed reference results.

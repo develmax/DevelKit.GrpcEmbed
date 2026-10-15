@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>4.0.3</Version>
+    <Version>4.0.4</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Prepare typed MVC Task and ValueTask result readers once during discovery. Avoid per-call Result/AsTask reflection and the extra Task used to return completed results. Preserve cancellation, original exceptions, single-consumption ValueTask sources, the 4.0.x wire format, contract hashes, authorization and audit hooks. See CHANGELOG.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Prepare and cache typed ActionResult result/value readers instead of per-response reflection. Avoid constructing parameter validation contexts when the parameter has no validation attributes; preserve object, property and IValidatableObject validation. Preserve the 4.0.x wire format, contract hashes, authorization, filters, audit and masking integrations. See CHANGELOG.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

@@ -26,6 +26,7 @@ internal static class ActionDelegates
 {
     public static Func<object?, ValueTask<object?>> CompileAwaiter(Type returnType)
     {
+        MvcResultReaders.Prepare(returnType);
         if (returnType == typeof(Task)) return AwaitTask;
         if (returnType == typeof(ValueTask)) return AwaitValueTask;
         if (returnType.IsGenericType)
@@ -88,6 +89,24 @@ internal static class ActionDelegates
             Expression.Assign(Expression.Property(created, "Value"), Expression.Convert(value, valueType)),
             Expression.Convert(created, typeof(object)));
         return Expression.Lambda<Func<object, object>>(body, value).Compile();
+    }
+}
+
+// Only immutable type/accessor metadata is retained, never request values.
+internal static class MvcResultReaders
+{
+    internal sealed record Reader(Func<object, object?> Result, Func<object, object?> Value);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Lazy<Reader>> Readers = new();
+
+    internal static Reader Get(Type type) => Readers.GetOrAdd(type, static key => new Lazy<Reader>(() => new Reader(
+        ActionDelegates.CompileGetter(key, "Result"), ActionDelegates.CompileGetter(key, "Value")))).Value;
+
+    internal static void Prepare(Type type)
+    {
+        if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Task<>) || type.GetGenericTypeDefinition() == typeof(ValueTask<>)))
+            type = type.GetGenericArguments()[0];
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Microsoft.AspNetCore.Mvc.ActionResult<>))
+            _ = Get(type);
     }
 }
 
