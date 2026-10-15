@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.0.3 — 2026-10-15
+
+- Prepare typed MVC `Task<T>` and `ValueTask<T>` result readers during discovery instead of looking up `Result`/`AsTask` with reflection on every call. Return results with `ValueTask<object?>`, avoiding an extra result task for synchronously completed reference results.
+- Preserve original exceptions, cancellation and single-consumption `IValueTaskSource<T>` behavior. Add completed/pending/faulted/cancelled result and allocation regressions.
+- Preserve the 4.0.x wire format, descriptors, contract hashes, authorization, filters and audit hooks. This reduces adapter overhead; it does not guarantee lower end-to-end latency for every workload.
+
 ## 4.0.2 — 2026-10-14
 
 - Measure stable scalar request envelopes before writing, allowing Grpc.Net.Client to use its pooled frame buffer without an intermediate growing buffer and copy. Complex DTO and collection arguments retain the existing serialization path.

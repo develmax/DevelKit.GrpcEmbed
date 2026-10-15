@@ -153,7 +153,7 @@ internal sealed class GrpcEmbedService
             if (index == filters.Length)
             {
                 for (var i = 0; i < arguments.Length; i++) arguments[i] = dictionary[method.Arguments[i].Parameter.Name!];
-                var value = await AwaitResult(method.Invoke(controller, arguments), method.Action.MethodInfo.ReturnType);
+                var value = await method.AwaitResult(method.Invoke(controller, arguments));
                 return new ActionExecutedContext(actionContext, filters.ToList(), controller) { Result = value as IActionResult ?? new ObjectResult(value) };
             }
             if (filters[index] is IAsyncActionFilter asyncFilter)
@@ -192,17 +192,6 @@ internal sealed class GrpcEmbedService
             return await ResultNext(index + 1);
         }
         return (await ResultNext(0)).Result;
-    }
-
-    private static async Task<object?> AwaitResult(object? pending, Type declaredReturnType)
-    {
-        if (pending is Task task) { await task.ConfigureAwait(false); return declaredReturnType == typeof(Task) ? null : task.GetType().GetProperty("Result")!.GetValue(task); }
-        if (pending is ValueTask valueTask) { await valueTask.ConfigureAwait(false); return null; }
-        if (pending is not null && pending.GetType().IsValueType && pending.GetType().IsGenericType && pending.GetType().GetGenericTypeDefinition() == typeof(ValueTask<>))
-        {
-            var convertedTask = (Task)pending.GetType().GetMethod("AsTask")!.Invoke(pending, null)!; await convertedTask.ConfigureAwait(false); return convertedTask.GetType().GetProperty("Result")!.GetValue(convertedTask);
-        }
-        return pending;
     }
 
     private static object? UnwrapActionResult(object? raw, GrpcEmbedOptions options)
