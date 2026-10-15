@@ -14,6 +14,7 @@ internal sealed record RuntimeMethod(
     RuntimeArgument[] Arguments, Func<object, object>? WrapResponse)
 {
     public Func<object?, ValueTask<object?>> AwaitResult { get; } = ActionDelegates.CompileAwaiter(Action.MethodInfo.ReturnType);
+    public MvcResultReaders.Reader? ResultReader { get; } = MvcResultReaders.Prepare(Action.MethodInfo.ReturnType);
 }
 
 internal enum RuntimeArgumentSource { Transport, CancellationToken, HttpContext, ClaimsPrincipal, HttpRequest, HttpResponse, Services }
@@ -26,7 +27,6 @@ internal static class ActionDelegates
 {
     public static Func<object?, ValueTask<object?>> CompileAwaiter(Type returnType)
     {
-        MvcResultReaders.Prepare(returnType);
         if (returnType == typeof(Task)) return AwaitTask;
         if (returnType == typeof(ValueTask)) return AwaitValueTask;
         if (returnType.IsGenericType)
@@ -95,18 +95,19 @@ internal static class ActionDelegates
 // Only immutable type/accessor metadata is retained, never request values.
 internal static class MvcResultReaders
 {
-    internal sealed record Reader(Func<object, object?> Result, Func<object, object?> Value);
+    internal sealed record Reader(Type Type, Func<object, object?> Result, Func<object, object?> Value);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Lazy<Reader>> Readers = new();
 
     internal static Reader Get(Type type) => Readers.GetOrAdd(type, static key => new Lazy<Reader>(() => new Reader(
-        ActionDelegates.CompileGetter(key, "Result"), ActionDelegates.CompileGetter(key, "Value")))).Value;
+        key, ActionDelegates.CompileGetter(key, "Result"), ActionDelegates.CompileGetter(key, "Value")))).Value;
 
-    internal static void Prepare(Type type)
+    internal static Reader? Prepare(Type type)
     {
         if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Task<>) || type.GetGenericTypeDefinition() == typeof(ValueTask<>)))
             type = type.GetGenericArguments()[0];
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Microsoft.AspNetCore.Mvc.ActionResult<>))
-            _ = Get(type);
+            return Get(type);
+        return null;
     }
 }
 

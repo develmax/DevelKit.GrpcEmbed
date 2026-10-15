@@ -79,7 +79,7 @@ internal sealed class GrpcEmbedService
                 if (!exceptionContext.ExceptionHandled) throw;
                 raw = exceptionContext.Result;
             }
-            raw = UnwrapActionResult(raw, _options);
+            raw = UnwrapActionResult(raw, _options, method.ResultReader);
             if (http.Items.ContainsKey(GrpcEmbedPayloadAuditContract.CaptureResponseKey))
                 http.Items[GrpcEmbedPayloadAuditContract.ResponseKey] = raw;
             if (typeof(TResponse) == typeof(GrpcEmbedEmpty))
@@ -194,12 +194,12 @@ internal sealed class GrpcEmbedService
         return (await ResultNext(0)).Result;
     }
 
-    internal static object? UnwrapActionResult(object? raw, GrpcEmbedOptions options)
+    internal static object? UnwrapActionResult(object? raw, GrpcEmbedOptions options, MvcResultReaders.Reader? prepared = null)
     {
         if (raw is ObjectResult objectResult)
         {
             if (objectResult.StatusCode is { } status && status >= 300) throw StatusException(status, objectResult.Value?.ToString(), options);
-            return UnwrapActionResult(objectResult.Value, options);
+            return UnwrapActionResult(objectResult.Value, options, prepared);
         }
         if (raw is StatusCodeResult statusResult)
         {
@@ -209,9 +209,9 @@ internal sealed class GrpcEmbedService
         if (raw is IActionResult result) throw new RpcException(new Status(StatusCode.Unimplemented, $"MVC result {result.GetType().Name} is not supported."));
         if (raw is not null && raw.GetType().IsGenericType && raw.GetType().GetGenericTypeDefinition() == typeof(ActionResult<>))
         {
-            var readers = MvcResultReaders.Get(raw.GetType());
+            var readers = prepared?.Type == raw.GetType() ? prepared : MvcResultReaders.Get(raw.GetType());
             var innerResult = readers.Result(raw);
-            return innerResult is null ? readers.Value(raw) : UnwrapActionResult(innerResult, options);
+            return innerResult is null ? readers.Value(raw) : UnwrapActionResult(innerResult, options, prepared);
         }
         return raw;
     }

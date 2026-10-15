@@ -14,7 +14,12 @@ public class ResultValidationPlanTests
     {
         var options = new GrpcEmbedOptions();
         var value = new Payload { Name = "synthetic" };
-        MvcResultReaders.Prepare(typeof(Task<ActionResult<Payload>>));
+        var prepared = MvcResultReaders.Prepare(typeof(Task<ActionResult<Payload>>));
+        Assert.NotNull(prepared);
+        Assert.Same(value, GrpcEmbedService.UnwrapActionResult(new ActionResult<Payload>(value), options, prepared));
+        Assert.Same(value, GrpcEmbedService.UnwrapActionResult(new ActionResult<Payload>(new OkObjectResult(value)), options, prepared));
+        Assert.Equal(42, GrpcEmbedService.UnwrapActionResult(new ActionResult<int>(42), options, prepared));
+        Assert.Null(MvcResultReaders.Prepare(typeof(Task<Payload>)));
         Assert.Same(value, GrpcEmbedService.UnwrapActionResult(new ActionResult<Payload>(value), options));
         Assert.Same(value, GrpcEmbedService.UnwrapActionResult(new ActionResult<Payload>(new OkObjectResult(value)), options));
         Assert.Same(value, GrpcEmbedService.UnwrapActionResult(new ObjectResult(new ActionResult<Payload>(value)), options));
