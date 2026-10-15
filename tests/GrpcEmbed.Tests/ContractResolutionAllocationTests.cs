@@ -8,6 +8,50 @@ namespace GrpcEmbed.Tests;
 
 public sealed class ContractResolutionAllocationTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("GrpcEmbed.Target")]
+    public async Task Bound_resolution_is_allocation_free_when_warm_and_invalidated_on_refresh(string? service)
+    {
+        using var handler = new SchemaHandler();
+        using var http = new HttpClient(handler);
+        var state = Create(http);
+        var prepare = state.Bind(service, "Get", "request", "response");
+        var first = await prepare(default, null);
+        for (var i = 0; i < 1000; i++) _ = await prepare(default, null);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 1000; i++) _ = await prepare(default, null);
+        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        Assert.Same(first, await prepare(default, null));
+        handler.Hash = new string('b', 64);
+        await state.RefreshAsync(first!.Hash, default);
+        var changed = await prepare(default, null);
+        Assert.NotSame(first, changed);
+        Assert.Equal(handler.Hash, changed!.Hash);
+        handler.Incompatible = true;
+        handler.Hash = new string('c', 64);
+        await state.RefreshAsync(changed.Hash, default);
+        Assert.Equal(StatusCode.FailedPrecondition, (await Assert.ThrowsAsync<RpcException>(async () =>
+            await prepare(default, null))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Bound_automatic_resolution_rejects_new_ambiguity_and_supports_parallel_calls()
+    {
+        using var handler = new SchemaHandler();
+        using var http = new HttpClient(handler);
+        var state = Create(http);
+        var prepare = state.Bind(null, "Get", "request", "response");
+        var first = await prepare(default, null);
+        await Task.WhenAll(Enumerable.Range(0, 32).Select(_ => Task.Run(async () =>
+            Assert.Same(first, await prepare(default, null)))));
+        handler.Duplicate = true;
+        handler.Hash = new string('b', 64);
+        await state.RefreshAsync(first!.Hash, default);
+        Assert.Equal(StatusCode.FailedPrecondition, (await Assert.ThrowsAsync<RpcException>(async () =>
+            await prepare(default, null))).StatusCode);
+    }
+
     [Fact]
     public async Task Automatic_resolution_does_not_allocate_per_unrelated_operation()
     {

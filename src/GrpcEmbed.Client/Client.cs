@@ -219,6 +219,8 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
         if (_options.CaptureAuditPayloads) ClientAuditBody<TRequest>.Initialize();
         var contractService = _options.ServiceName is null && serviceAttribute is null && _options.OperationResolver is null
             ? null : method.ServiceName;
+        var prepareContract = _options.Contract.Fetch == GrpcEmbedContractFetch.Never ? null :
+            _contractState.Bind(contractService, method.Name, ContractShapeCache<TRequest>.Hash, ContractShapeCache<TWireResponse>.Hash);
         BoundCall<TRequest, TWireResponse>? boundCall = null;
         BoundCall<TRequest, TWireResponse> ResolveCall(ClientContractState.PreparedContract? prepared)
         {
@@ -237,15 +239,15 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
         }
         return args =>
         {
-            var task = CallCore<TRequest, TWireResponse, TResponse>(method, contractService, parameters.Length,
+            var task = CallCore<TRequest, TWireResponse, TResponse>(parameters.Length, prepareContract,
                 requestFactory, ResolveCall, args ?? Array.Empty<object?>());
             if (contract.ReturnType == typeof(ValueTask)) return new ValueTask(task);
             return returnsValueTask ? new ValueTask<TResponse>(task) : task;
         };
     }
 
-    private async Task<TResponse> CallCore<TRequest, TWireResponse, TResponse>(Method<TRequest, TWireResponse> method,
-        string? contractService, int parameterCount, Func<object?[], TRequest> requestFactory,
+    private async Task<TResponse> CallCore<TRequest, TWireResponse, TResponse>(int parameterCount,
+        Func<CancellationToken, DateTime?, ValueTask<ClientContractState.PreparedContract?>>? prepareContract, Func<object?[], TRequest> requestFactory,
         Func<ClientContractState.PreparedContract?, BoundCall<TRequest, TWireResponse>> resolveCall, object?[] args) where TRequest : class where TWireResponse : class
     {
         var request = requestFactory(args);
@@ -255,9 +257,7 @@ internal class GrpcEmbedProxy<TContract> : DispatchProxy where TContract : class
         for (var attempt = 0; ; attempt++)
         {
         token.ThrowIfCancellationRequested();
-        var prepared = _options.Contract.Fetch == GrpcEmbedContractFetch.Never ? null :
-            await _contractState.PrepareAsync(contractService, method.Name,
-                ContractShapeCache<TRequest>.Hash, ContractShapeCache<TWireResponse>.Hash, token, deadline).ConfigureAwait(false);
+        var prepared = prepareContract is null ? null : await prepareContract(token, deadline).ConfigureAwait(false);
         var hash = prepared?.Hash;
         var bound = resolveCall(prepared);
         var activeMethod = bound.Method;

@@ -22,6 +22,7 @@ internal sealed class ClientContractState
     internal sealed record PreparedContract(string Hash, string Service, ClientRoute? Route, string? BodyParameter = null, string? HttpMethod = null);
     private sealed record Operation(string Request, string Response, PreparedContract Prepared);
     private sealed record Snapshot(string Hash, Dictionary<string, Operation> Operations, DateTime Loaded);
+    private sealed record Resolution(Snapshot Snapshot, PreparedContract Prepared);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly GrpcEmbedClientOptions _options;
     private volatile Snapshot? _snapshot;
@@ -54,11 +55,34 @@ internal sealed class ClientContractState
     {
         if (_options.Contract.Fetch == GrpcEmbedContractFetch.Never) return null;
         var snapshot = await LoadAsync(false, null, token, deadline).ConfigureAwait(false);
+        return Resolve(snapshot, service, method, requestShape, responseShape, service + "/" + method, "/" + method);
+    }
+
+    // One binding per proxy method. Cache only a successful model/operation
+    // resolution, scoped to the exact immutable snapshot, never request data.
+    internal Func<CancellationToken, DateTime?, ValueTask<PreparedContract?>> Bind(string? service, string method, string requestShape, string responseShape)
+    {
+        var key = service + "/" + method;
+        var suffix = "/" + method;
+        Resolution? resolved = null;
+        return Prepare;
+
+        async ValueTask<PreparedContract?> Prepare(CancellationToken token, DateTime? deadline)
+        {
+            if (_options.Contract.Fetch == GrpcEmbedContractFetch.Never) return null;
+            var snapshot = await LoadAsync(false, null, token, deadline).ConfigureAwait(false);
+            var cached = Volatile.Read(ref resolved);
+            if (cached is not null && ReferenceEquals(cached.Snapshot, snapshot)) return cached.Prepared;
+            var prepared = Resolve(snapshot, service, method, requestShape, responseShape, key, suffix);
+            Volatile.Write(ref resolved, new Resolution(snapshot, prepared));
+            return prepared;
+        }
+    }
+
+    private static PreparedContract Resolve(Snapshot snapshot, string? service, string method, string requestShape, string responseShape, string key, string suffix)
+    {
         if (service is null)
         {
-            // Compute the suffix once, not once per published operation. Avoid
-            // materializing candidate arrays on the warmed-up RPC path.
-            var suffix = "/" + method;
             Operation? named = null, matching = null;
             var namedCount = 0;
             var matchingCount = 0;
@@ -80,7 +104,6 @@ internal sealed class ClientContractState
                     $"Local models do not match the contract for {selected.Prepared.Service}/{method}; the operation was not sent."));
             return selected.Prepared;
         }
-        var key = service + "/" + method;
         if (!snapshot.Operations.TryGetValue(key, out var operation))
             throw new RpcException(new Status(StatusCode.Unimplemented, $"Contract does not publish {key}."));
         if (operation.Request != requestShape || operation.Response != responseShape)
