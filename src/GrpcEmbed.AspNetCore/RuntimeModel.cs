@@ -11,7 +11,10 @@ internal sealed record RuntimeMethod(
     ControllerActionDescriptor Action, string ServiceName, string MethodName,
     Type RequestType, Type ResponseType, Type ActionResponseType, IReadOnlyList<ParameterInfo> Parameters,
     Func<object, object?[], object?> Invoke, Func<object, object?>[] RequestReaders,
-    RuntimeArgument[] Arguments, Func<object, object>? WrapResponse);
+    RuntimeArgument[] Arguments, Func<object, object>? WrapResponse)
+{
+    public Func<object?, ValueTask<object?>> AwaitResult { get; } = ActionDelegates.CompileAwaiter(Action.MethodInfo.ReturnType);
+}
 
 internal enum RuntimeArgumentSource { Transport, CancellationToken, HttpContext, ClaimsPrincipal, HttpRequest, HttpResponse, Services }
 
@@ -21,6 +24,42 @@ internal sealed record RuntimeArgument(
 
 internal static class ActionDelegates
 {
+    public static Func<object?, ValueTask<object?>> CompileAwaiter(Type returnType)
+    {
+        if (returnType == typeof(Task)) return AwaitTask;
+        if (returnType == typeof(ValueTask)) return AwaitValueTask;
+        if (returnType.IsGenericType)
+        {
+            var definition = returnType.GetGenericTypeDefinition();
+            var name = definition == typeof(Task<>) ? nameof(AwaitTypedTask)
+                : definition == typeof(ValueTask<>) ? nameof(AwaitTypedValueTask) : null;
+            if (name is not null)
+                return (Func<object?, ValueTask<object?>>)typeof(ActionDelegates)
+                    .GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!
+                    .MakeGenericMethod(returnType.GetGenericArguments())
+                    .CreateDelegate(typeof(Func<object?, ValueTask<object?>>));
+        }
+        return static value => new ValueTask<object?>(value);
+    }
+
+    private static async ValueTask<object?> AwaitTask(object? value)
+    {
+        if (value is Task task) await task.ConfigureAwait(false);
+        return null;
+    }
+
+    private static async ValueTask<object?> AwaitValueTask(object? value)
+    {
+        if (value is ValueTask task) await task.ConfigureAwait(false);
+        return null;
+    }
+
+    private static async ValueTask<object?> AwaitTypedTask<T>(object? value)
+        => value is null ? null : await ((Task<T>)value).ConfigureAwait(false);
+
+    private static async ValueTask<object?> AwaitTypedValueTask<T>(object? value)
+        => value is null ? null : await ((ValueTask<T>)value).ConfigureAwait(false);
+
     public static Func<object, object?[], object?> Compile(MethodInfo method)
     {
         var target = Expression.Parameter(typeof(object));
