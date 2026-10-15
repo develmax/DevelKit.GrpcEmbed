@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.0.5 — 2026-10-15
+
 - Reuse one request-local MVC filter-context list instead of copying it for each authorization/resource/action/result context. Keep the execution order stable and preserve parallel-request isolation, short circuits and exception handling.
 - Bind successful client operation/shape resolution to the loaded contract snapshot. Avoid repeated operation scans and key construction on warm calls; resolve and validate again after contract refresh. No request DTOs, responses or authorization metadata are cached.
 - Add concurrent filter-context and contract-refresh/allocation regressions. The 4.0.x wire format, schema fingerprints, authorization, body-audit and masking hooks are unchanged; no universal business-latency speedup is claimed.
