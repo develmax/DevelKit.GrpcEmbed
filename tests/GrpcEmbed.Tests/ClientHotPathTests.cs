@@ -66,6 +66,46 @@ public sealed class ClientHotPathTests
 
     private static void Arguments(string? key) { }
 
+    [Theory]
+    [InlineData("123", "api/v{version}/clients/{id}/", "tenant", "/tenant/api/v1/clients/123")]
+    [InlineData("", "api/v{version}/clients/{id}/", "tenant", "/tenant/api/v1/clients")]
+    [InlineData(null, "api/v{version}/clients/{id=42}/", "tenant", "/tenant/api/v1/clients/42")]
+    [InlineData("a/b ?#%", "api/v{version}/clients/{id}/history", "", "/api/v1/clients/a%2Fb%20%3F%23%25/history")]
+    [InlineData("кириллица😀", "api/v{version}/clients/{id}", "/tenant/", "/tenant/api/v1/clients/%D0%BA%D0%B8%D1%80%D0%B8%D0%BB%D0%BB%D0%B8%D1%86%D0%B0%F0%9F%98%80")]
+    [InlineData("%2e%2e", "api/v{version}/clients/{id}", "", "/api/v1/clients/%252e%252e")]
+    [InlineData("123", "api/v{version}/clients/{id}/again/{id}", "", "/api/v1/clients/123/again/123")]
+    [InlineData("123", "api/{id}/v{version}", "", "/api/123/v1")]
+    public void Single_scalar_route_plan_matches_general_renderer(string? value, string template, string mount, string expected)
+    {
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(new { template, parameters = new { id = "key" } }));
+        var route = ClientRoute.Parse(json.RootElement);
+        var options = new GrpcEmbedClientOptions { Address = new Uri("http://localhost/") };
+        options.Routing.Mode = GrpcEmbedRoutingMode.Rest;
+        options.Routing.PathBase = mount;
+        options.Routing.Values["version"] = "1";
+        var parameters = typeof(ClientHotPathTests).GetMethod(nameof(Arguments), System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetParameters();
+        var bound = ClientRoute.Bind(options, route, "GrpcEmbed.Client", "Get", parameters);
+        Assert.Equal(expected, bound(new object?[] { value }));
+        Assert.Equal(expected, ClientRoute.Build(options, route, "GrpcEmbed.Client", "Get", parameters, new object?[] { value }));
+    }
+
+    [Fact]
+    public async Task Single_scalar_route_plan_never_retains_other_calls_arguments()
+    {
+        using var json = JsonDocument.Parse("{\"template\":\"api/v1/clients/{id}\",\"parameters\":{\"id\":\"key\"}}");
+        var options = new GrpcEmbedClientOptions { Address = new Uri("http://localhost/") };
+        options.Routing.Mode = GrpcEmbedRoutingMode.Rest;
+        var parameters = typeof(ClientHotPathTests).GetMethod(nameof(Arguments), System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetParameters();
+        var bound = ClientRoute.Bind(options, ClientRoute.Parse(json.RootElement), "GrpcEmbed.Client", "Get", parameters);
+        await Task.WhenAll(Enumerable.Range(0, 32).Select(i => Task.Run(() =>
+            Assert.Equal("/api/v1/clients/" + i, bound(new object?[] { i.ToString(System.Globalization.CultureInfo.InvariantCulture) })))));
+        object?[] arguments = { "123" };
+        for (var i = 0; i < 1000; i++) _ = bound(arguments);
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 1000; i++) _ = bound(arguments);
+        Assert.True(GC.GetAllocatedBytesForCurrentThread() - allocated < 128 * 1000);
+    }
+
     [Fact]
     public async Task Cold_contract_fetch_observes_call_deadline_and_cancels_underlying_io()
     {
