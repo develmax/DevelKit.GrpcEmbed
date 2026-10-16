@@ -173,6 +173,11 @@ See the [HTTP/3 setup and verification guide](https://github.com/develmax/DevelK
 
 ## Performance comparison
 
+For separate, opt-in measurements of the actual response serializer, see
+[server diagnostics](docs/server-diagnostics.md). `OnStarting` is not a network
+send timestamp; diagnostic measurements must not be confused with an
+uninstrumented end-to-end comparison.
+
 Measured with BenchmarkDotNet 0.15.2 ShortRun on .NET 10.0.11, Windows 10, and an Intel Core i5-12500H. All four paths use ASP.NET Core TestServer. Payload size is the length of the ASCII string in the DTO, before serialization.
 
 **Mean latency per request (lower is better):**

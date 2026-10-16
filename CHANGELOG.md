@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.0.7 — 2026-10-16
+
+- Add an opt-in `DevelKit-GrpcEmbed-Server` EventSource event around the actual server response marshaller, including protobuf serialization and `SerializationContext.Complete()`, but not HTTP response flushing. The payload contains only three numeric fields: start timestamp, elapsed Stopwatch ticks and success (0/1); it never contains DTOs, headers, identifiers or exception text.
+- With no listener, response serialization does not read a clock or emit events; a warm-path regression verifies no additional serialization allocations. Diagnostic listener failures do not replace business serialization results or exceptions.
+- Preserve the 4.0.x wire format, schema fingerprints, controller execution, authorization, audit, masking and cancellation. Diagnostics are for separate instrumented experiments, not a claim of improved business latency. See [server diagnostics](docs/server-diagnostics.md).
+
 ## 4.0.6 — 2026-10-16
 
 - Materialize MVC filters without a per-request captured LINQ selector/iterator. Preserve descriptor order, request-scoped factory resolution, exception propagation and separate execution/context collections. An isolated .NET 6 probe saves 160 bytes per materialization; this is not a whole-request latency claim.
