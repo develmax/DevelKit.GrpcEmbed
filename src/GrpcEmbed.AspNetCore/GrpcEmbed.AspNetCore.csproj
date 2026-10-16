@@ -5,9 +5,9 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../GrpcEmbed.Abstractions/GrpcEmbed.Abstractions.csproj" />
     <ProjectReference Include="../GrpcEmbed.Core/GrpcEmbed.Core.csproj" />
-    <PackageReference Include="Grpc.AspNetCore" Version="2.71.0" />
-    <PackageReference Include="protobuf-net" Version="3.2.56" />
-    <PackageReference Include="Google.Protobuf" Version="3.31.1" />
-    <PackageReference Include="Grpc.Reflection" Version="2.71.0" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.84.0" />
+    <PackageReference Include="protobuf-net" Version="3.4.30" />
+    <PackageReference Include="Google.Protobuf" Version="3.36.2" />
+    <PackageReference Include="Grpc.Reflection" Version="2.84.0" />
   </ItemGroup>
 </Project>
