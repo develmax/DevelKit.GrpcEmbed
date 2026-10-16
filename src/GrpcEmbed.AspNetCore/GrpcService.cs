@@ -280,7 +280,7 @@ internal sealed class GrpcEmbedMethodProvider : IServiceMethodProvider<GrpcEmbed
     private static void Add<TRequest, TResponse>(ServiceMethodProviderContext<GrpcEmbedService> context, RuntimeMethod runtime)
         where TRequest : class where TResponse : class
     {
-        var method = new Method<TRequest, TResponse>(MethodType.Unary, "GrpcEmbed." + runtime.ServiceName, runtime.MethodName, Marshaller<TRequest>(), Marshaller<TResponse>());
+        var method = new Method<TRequest, TResponse>(MethodType.Unary, "GrpcEmbed." + runtime.ServiceName, runtime.MethodName, Marshaller<TRequest>(), Marshaller<TResponse>(response: true));
         var bodyParameter = runtime.Action.Parameters.OfType<ControllerParameterDescriptor>()
             .SingleOrDefault(p => p.BindingInfo?.BindingSource?.Id == "Body");
         var bodyIndex = bodyParameter is null ? -1 : Array.FindIndex(runtime.Parameters.ToArray(), p => p == bodyParameter.ParameterInfo);
@@ -292,7 +292,35 @@ internal sealed class GrpcEmbedMethodProvider : IServiceMethodProvider<GrpcEmbed
         context.AddUnaryMethod(method, metadata, (service, request, call) => service.Invoke<TRequest, TResponse>(runtime, request, call));
     }
 
-    private static Marshaller<T> Marshaller<T>() => Marshallers.Create<T>(
-        (value, context) => { GrpcEmbedRuntimeModel.Model.Serialize(context.GetBufferWriter(), value); context.Complete(); },
+    internal static Marshaller<T> Marshaller<T>(bool response = false) => Marshallers.Create<T>(
+        response ? SerializeResponse<T> : Serialize<T>,
         context => (T)GrpcEmbedRuntimeModel.Model.Deserialize(context.PayloadAsReadOnlySequence(), typeof(T), null, null)!);
+
+    private static void Serialize<T>(T value, SerializationContext context)
+    {
+        GrpcEmbedRuntimeModel.Model.Serialize(context.GetBufferWriter(), value);
+        context.Complete();
+    }
+
+    private static void SerializeResponse<T>(T value, SerializationContext context)
+    {
+        var diagnostics = GrpcEmbedServerEventSource.Log;
+        if (!diagnostics.IsEnabled(System.Diagnostics.Tracing.EventLevel.Verbose, GrpcEmbedServerEventSource.Keywords.Serialization))
+        {
+            Serialize(value, context);
+            return;
+        }
+
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var succeeded = false;
+        try
+        {
+            Serialize(value, context);
+            succeeded = true;
+        }
+        finally
+        {
+            diagnostics.ResponseSerialization(started, System.Diagnostics.Stopwatch.GetTimestamp() - started, succeeded ? 1 : 0);
+        }
+    }
 }

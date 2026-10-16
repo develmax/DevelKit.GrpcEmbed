@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>4.0.6</Version>
+    <Version>4.0.7</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Reduce client route-header, route-building and bound-call delegate allocations; materialize request-scoped MVC filters without a captured LINQ selector. Preserve filter order, DI scopes, contract refresh, cancellation, the 4.0.x wire format, authorization, audit and masking integrations. No universal end-to-end latency gain is claimed. See CHANGELOG.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Add opt-in numeric EventSource timing for server response serialization. Disabled diagnostics do not timestamp, emit events or add per-call serialization allocations. Preserve the 4.0.x wire format, schema hashes, authorization, audit, masking and cancellation. No end-to-end performance improvement is claimed. See CHANGELOG.md and docs/server-diagnostics.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
