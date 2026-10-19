@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.1.0 — 2026-10-19
+
+- Expose both `grpc.reflection.v1.ServerReflection` and `grpc.reflection.v1alpha.ServerReflection` when reflection is enabled. Resolve exact symbols, filenames and transitive dependencies, including reflection's own descriptors, from one cached schema snapshot.
+- Bind `GrpcEmbed:Server:EnableReflection` from configuration. `Contract.AllowAnonymous` now applies to discovery through Reflection as well as HTTP schema endpoints; otherwise the existing schema policy and host fallback authorization apply. Business authorization is unchanged.
+- Add opt-in `GrpcEmbed:Server:Routing:EnableNativeAliases` (default `false`). Standard `/GrpcEmbed.Service/Method` endpoints can coexist with Rest, Method or ControllerMethod routes, retaining controller/filter metadata, payload audit hooks and pre-execution contract validation. Endpoint conventions returned by `MapGrpcEmbed()` apply to both sets of business routes.
+- Keep the 4.0.x protobuf wire format, business descriptors and schema hashes unchanged. Reflection clients can fetch descriptors without a local `.proto`; required contract hashes and business credentials must still be supplied as metadata. See [routing and Reflection](docs/url-routing.md).
+
 ## 4.0.7 — 2026-10-16
 
 - Add an opt-in `DevelKit-GrpcEmbed-Server` EventSource event around the actual server response marshaller, including protobuf serialization and `SerializationContext.Complete()`, but not HTTP response flushing. The payload contains only three numeric fields: start timestamp, elapsed Stopwatch ticks and success (0/1); it never contains DTOs, headers, identifiers or exception text.

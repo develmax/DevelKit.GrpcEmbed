@@ -4,7 +4,8 @@ GrpcEmbed can expose a unary gRPC operation at its MVC route, including route
 parameters. REST continues to use JSON and its original HTTP verb. gRPC uses
 POST, `application/grpc`, Protobuf, and the `grpcembed-operation` metadata header.
 This is a GrpcEmbed routing adapter, not the standard gRPC `/Service/Method`
-addressing convention. Ordinary generated gRPC clients require `Native` mode.
+addressing convention. Ordinary generated gRPC clients require `Native` mode
+or the optional native aliases introduced in 4.1.
 
 ## Server
 
@@ -24,7 +25,7 @@ GrpcEmbed:
 
 `AllowAnonymous` applies only to schema download endpoints, including when the
 host has a fallback authorization policy. It overrides `SchemaAuthorizationPolicy`
-for these endpoints, not for reflection or business operations. Do not put secrets
+for these endpoints and (since 4.1) Reflection, never for business operations. Do not put secrets
 in contract metadata. The default remains false for compatibility.
 
 `ExposeAll` removes the need for `[GrpcExport]`; `[GrpcIgnore]` still excludes an
@@ -117,6 +118,62 @@ the ingress-to-pod leg when that listener uses `http://`.
 
 Verify this configuration with the actual ingress before rollout. Local
 application tests do not prove load-balancer behavior or cluster deployment.
+
+## Reflection and native aliases (4.1)
+
+Keep existing URLs while also exposing canonical gRPC endpoints:
+
+```yaml
+GrpcEmbed:
+  Server:
+    Enabled: true
+    ExposeAll: true
+    EnableReflection: true
+    Routing:
+      Mode: Rest
+      EnableNativeAliases: true
+    Contract:
+      Enabled: true
+      ExposeEndpoint: true
+      AllowAnonymous: true
+      Validation: Required
+```
+
+`EnableReflection` and `EnableNativeAliases` default to `false`. In Native mode
+the alias option has no effect: canonical endpoints already exist. Existing
+route-mode clients and REST requests continue unchanged. Aliases use the same
+action, authorization, MVC filters, request/response audit contract and hash gate;
+they do not require `grpcembed-operation`, because the path identifies the RPC.
+Their arguments are entirely in Protobuf, not substituted into a REST URL.
+Neither option changes the business schema hash or the 4.0.x wire format.
+
+Reflection supports bidirectional streams at both of these application-relative paths:
+
+```text
+/grpc.reflection.v1.ServerReflection/ServerReflectionInfo
+/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo
+```
+
+It resolves service/type/method symbols, files and their transitive dependencies.
+The stream uses a consistent immutable schema snapshot. Discovery follows
+`Contract.AllowAnonymous`, otherwise `SchemaAuthorizationPolicy` and the host's
+fallback policy. This does not make business calls anonymous.
+
+For example, Insomnia 13.3.1 supports an application prefix in its gRPC address:
+`grpcs://example.org:443/my-service`. Select server Reflection/Sync without importing
+a `.proto`, choose `GrpcEmbed.Service/Method`, then enter the JSON request.
+Insomnia downloads descriptors and encodes/decodes Protobuf; no `.bin` is needed.
+With `Validation: Required`, first download `/_grpcembed/schema.json` under that
+same application prefix and copy the response's `grpcembed-schema-hash` into
+the `grpcembed-contract-hash` request metadata. Add the ordinary business
+`authorization: Bearer ...` metadata as well. Refresh the contract/hash after
+a pre-execution mismatch; do not disable the gate to make a diagnostic tool work.
+
+The proxy must forward both Reflection and canonical business paths with HTTP/2
+and preserve gRPC trailers. It must route `/my-service/...` to the selected service
+and handle the prefix exactly as for existing REST-compatible URLs. Reflection
+is a bidirectional stream; a proxy that buffers the entire request before sending
+the response can cause Sync to hang even when unary business calls work.
 
 ## Upgrade from 2.0
 

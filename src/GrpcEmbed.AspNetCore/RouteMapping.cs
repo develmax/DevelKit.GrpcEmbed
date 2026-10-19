@@ -101,7 +101,8 @@ internal sealed class GrpcEmbedRouteSelectionPolicy : MatcherPolicy, IEndpointSe
             var metadata = candidates[i].Endpoint.Metadata.GetMetadata<GrpcEmbedRouteMetadata>();
             if (metadata is null)
             {
-                if (grpc && candidates[i].Endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>() is not null)
+                if (grpc && candidates[i].Endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>() is not null &&
+                    candidates[i].Endpoint.Metadata.GetMetadata<Grpc.AspNetCore.Server.GrpcMethodMetadata>() is null)
                     candidates.SetValidity(i, false);
             }
             else if (!grpc || operation.Count != 1 || operation[0] != "GrpcEmbed." + metadata.Method.ServiceName + "/" + metadata.Method.MethodName)

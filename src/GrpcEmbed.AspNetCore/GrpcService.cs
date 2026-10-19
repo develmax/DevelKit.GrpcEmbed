@@ -15,7 +15,7 @@ using System.Security.Claims;
 
 namespace GrpcEmbed.AspNetCore;
 
-internal sealed class GrpcEmbedService
+internal class GrpcEmbedService
 {
     private readonly IServiceProvider _services;
     private readonly IControllerFactory _controllers;
@@ -272,13 +272,17 @@ internal sealed class GrpcEmbedMethodProvider : IServiceMethodProvider<GrpcEmbed
     private readonly RuntimeRegistry _registry;
     public GrpcEmbedMethodProvider(IServiceProvider services, RuntimeRegistry registry) { _services = services; _registry = registry; }
     public void OnServiceMethodDiscovery(ServiceMethodProviderContext<GrpcEmbedService> context)
+        => Discover(context, _registry.Get(_services));
+
+    internal static void Discover<TService>(ServiceMethodProviderContext<TService> context, IEnumerable<RuntimeMethod> methods)
+        where TService : GrpcEmbedService
     {
-        foreach (var method in _registry.Get(_services)) typeof(GrpcEmbedMethodProvider).GetMethod(nameof(Add), BindingFlags.NonPublic | BindingFlags.Static)!
-            .MakeGenericMethod(method.RequestType, method.ResponseType).Invoke(null, new object[] { context, method });
+        foreach (var method in methods) typeof(GrpcEmbedMethodProvider).GetMethod(nameof(Add), BindingFlags.NonPublic | BindingFlags.Static)!
+            .MakeGenericMethod(method.RequestType, method.ResponseType, typeof(TService)).Invoke(null, new object[] { context, method });
     }
 
-    private static void Add<TRequest, TResponse>(ServiceMethodProviderContext<GrpcEmbedService> context, RuntimeMethod runtime)
-        where TRequest : class where TResponse : class
+    private static void Add<TRequest, TResponse, TService>(ServiceMethodProviderContext<TService> context, RuntimeMethod runtime)
+        where TRequest : class where TResponse : class where TService : GrpcEmbedService
     {
         var method = new Method<TRequest, TResponse>(MethodType.Unary, "GrpcEmbed." + runtime.ServiceName, runtime.MethodName, Marshaller<TRequest>(), Marshaller<TResponse>(response: true));
         var bodyParameter = runtime.Action.Parameters.OfType<ControllerParameterDescriptor>()
@@ -288,7 +292,9 @@ internal sealed class GrpcEmbedMethodProvider : IServiceMethodProvider<GrpcEmbed
         var auditContract = new GrpcEmbedPayloadAuditContract(
             value => bodyIndex < 0 ? null : runtime.RequestReaders[bodyIndex](value), verb);
         var metadata = runtime.Action.EndpointMetadata.Where(x => x is not Microsoft.AspNetCore.Routing.IHttpMethodMetadata)
-            .Append(auditContract).ToArray();
+            .Append(auditContract).ToList();
+        // Native aliases need MVC/API-version metadata too, but never REST verb constraints.
+        if (typeof(TService) == typeof(GrpcEmbedNativeService)) metadata.Add(runtime.Action);
         context.AddUnaryMethod(method, metadata, (service, request, call) => service.Invoke<TRequest, TResponse>(runtime, request, call));
     }
 
@@ -323,4 +329,19 @@ internal sealed class GrpcEmbedMethodProvider : IServiceMethodProvider<GrpcEmbed
             diagnostics.ResponseSerialization(started, System.Diagnostics.Stopwatch.GetTimestamp() - started, succeeded ? 1 : 0);
         }
     }
+}
+
+internal sealed class GrpcEmbedNativeService : GrpcEmbedService
+{
+    public GrpcEmbedNativeService(IServiceProvider services, IControllerFactory controllers, IOptions<GrpcEmbedOptions> options,
+        ILogger<GrpcEmbedService> logger, RuntimeRegistry registry) : base(services, controllers, options, logger, registry) { }
+}
+
+internal sealed class GrpcEmbedNativeMethodProvider : IServiceMethodProvider<GrpcEmbedNativeService>
+{
+    private readonly IServiceProvider _services;
+    private readonly RuntimeRegistry _registry;
+    public GrpcEmbedNativeMethodProvider(IServiceProvider services, RuntimeRegistry registry) { _services = services; _registry = registry; }
+    public void OnServiceMethodDiscovery(ServiceMethodProviderContext<GrpcEmbedNativeService> context)
+        => GrpcEmbedMethodProvider.Discover(context, _registry.Get(_services));
 }
