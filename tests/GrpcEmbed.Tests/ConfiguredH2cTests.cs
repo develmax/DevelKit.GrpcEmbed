@@ -17,8 +17,10 @@ namespace GrpcEmbed.Tests;
 
 public sealed class ConfiguredH2cTests
 {
-    [Fact]
-    public async Task Opted_in_remote_named_client_fetches_contract_and_calls_over_real_h2c()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Opted_in_remote_named_client_fetches_contract_and_calls_over_real_h2c(bool customFactory)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
         builder.Configuration.Sources.Clear();
@@ -53,12 +55,7 @@ public sealed class ConfiguredH2cTests
                 ["Existing:Grpc:Contract:SendHash"] = "true",
             }).Build();
             var services = new ServiceCollection();
-            services.AddHttpClient("Existing", http =>
-            {
-                // Keep a non-loopback URI so the configured-client security gate is exercised.
-                http.BaseAddress = new Uri($"http://cluster.example:{endpoint.Port}/api/users");
-                Assert.Equal(HttpVersion.Version11, http.DefaultRequestVersion);
-            }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            SocketsHttpHandler CreateHandler() => new()
             {
                 UseProxy = false,
                 ConnectCallback = async (_, cancellationToken) =>
@@ -71,7 +68,20 @@ public sealed class ConfiguredH2cTests
                     }
                     catch { socket.Dispose(); throw; }
                 },
-            });
+            };
+            var baseAddress = new Uri($"http://cluster.example:{endpoint.Port}/api/users");
+            services.AddHttpClient("Existing", http =>
+            {
+                // Keep a non-loopback URI so the configured-client security gate is exercised.
+                http.BaseAddress = baseAddress;
+                Assert.Equal(HttpVersion.Version11, http.DefaultRequestVersion);
+            }).ConfigurePrimaryHttpMessageHandler(() => CreateHandler());
+            if (customFactory)
+            {
+                var factory = new BypassingFactory(() => CreateHandler(), baseAddress);
+                services.AddSingleton<IHttpClientFactory>(factory);
+                services.AddSingleton<IHttpMessageHandlerFactory>(factory);
+            }
             services.AddSingleton<IUsers>(_ => new RestClient());
             services.AddConfiguredGrpcEmbedClients<IMarker>(configuration, _ => "Existing");
             await using var provider = services.BuildServiceProvider();
@@ -87,6 +97,12 @@ public sealed class ConfiguredH2cTests
     }
 
     public interface IMarker { }
+    // Intentionally bypasses HttpClientFactoryOptions, despite implementing both interfaces.
+    private sealed class BypassingFactory(Func<HttpMessageHandler> handler, Uri address) : IHttpClientFactory, IHttpMessageHandlerFactory
+    {
+        public HttpClient CreateClient(string name) => new(CreateHandler(name)) { BaseAddress = address };
+        public HttpMessageHandler CreateHandler(string name) => handler();
+    }
     public interface IUsers : IMarker { Task<UserDto> GetAsync(int id, CancellationToken cancellationToken); }
     private sealed class RestClient : IUsers
     {

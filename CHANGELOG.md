@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+- Route configured named-client calls inside their existing HTTP handler pipeline instead of forwarding them through a second `HttpClient.SendAsync`. Preserve configured headers, audit/authentication handlers, cancellation, ownership and route validation; manually supplied HTTP clients and custom factories retain the existing fallback. No protobuf wire or contract changes.
+
 ## 4.1.0 — 2026-10-19
 
 - Expose both `grpc.reflection.v1.ServerReflection` and `grpc.reflection.v1alpha.ServerReflection` when reflection is enabled. Resolve exact symbols, filenames and transitive dependencies, including reflection's own descriptors, from one cached schema snapshot.
