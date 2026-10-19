@@ -26,6 +26,7 @@ public static class GrpcEmbedExtensions
             configure?.Invoke(options);
             configuration.GetSection("GrpcEmbed:Server:Contract").Bind(options.Contract);
             configuration.GetSection("GrpcEmbed:Server:Routing").Bind(options.Routing);
+            options.EnableReflection = configuration.GetValue("GrpcEmbed:Server:EnableReflection", options.EnableReflection);
             options.ServerEnabled = configuration.GetValue<bool>("GrpcEmbed:Server:Enabled");
             options.ExportMode = configuration.GetValue<bool>("GrpcEmbed:Server:ExposeAll")
                 ? GrpcEmbedExportMode.All : GrpcEmbedExportMode.ExplicitOnly;
@@ -44,6 +45,8 @@ public static class GrpcEmbedExtensions
         services.TryAddSingleton<GrpcEmbedService>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<Microsoft.AspNetCore.Routing.MatcherPolicy, GrpcEmbedRouteSelectionPolicy>());
         services.AddSingleton<IServiceMethodProvider<GrpcEmbedService>, GrpcEmbedMethodProvider>();
+        services.AddSingleton<IServiceMethodProvider<GrpcEmbedNativeService>, GrpcEmbedNativeMethodProvider>();
+        services.AddSingleton<IServiceMethodProvider<GrpcEmbedReflectionService>, GrpcEmbedReflectionV1MethodProvider>();
         return services;
     }
 
@@ -65,8 +68,10 @@ public static class GrpcEmbedExtensions
             throw new InvalidOperationException("Contract validation requires contract generation and hashing.");
         if (options.Contract.ExposeEndpoint && !options.Contract.Enabled)
             throw new InvalidOperationException("The contract endpoint requires contract generation.");
-        var grpc = endpoints.MapGrpcService<GrpcEmbedService>();
-        GrpcEmbedRouteMapping.Configure(grpc, endpoints.ServiceProvider, options);
+        var routed = endpoints.MapGrpcService<GrpcEmbedService>();
+        GrpcEmbedRouteMapping.Configure(routed, endpoints.ServiceProvider, options);
+        IEndpointConventionBuilder grpc = options.Routing.EnableNativeAliases && options.Routing.Mode != GrpcEmbedRoutingMode.Native
+            ? new CombinedEndpoints(routed, endpoints.MapGrpcService<GrpcEmbedNativeService>()) : routed;
         if (options.Contract.Enabled && options.Contract.Generate == GrpcEmbedContractGeneration.Startup)
             endpoints.ServiceProvider.GetRequiredService<RuntimeRegistry>().GetManifest(endpoints.ServiceProvider);
         if (options.Contract.Validation != GrpcEmbedContractValidation.Disabled)
@@ -120,7 +125,8 @@ public static class GrpcEmbedExtensions
         if (options.EnableReflection)
         {
             var reflection = endpoints.MapGrpcService<GrpcEmbedReflectionService>();
-            if (options.SchemaAuthorizationPolicy is { Length: > 0 } policy) reflection.RequireAuthorization(policy);
+            if (options.Contract.AllowAnonymous) reflection.AllowAnonymous();
+            else if (options.SchemaAuthorizationPolicy is { Length: > 0 } policy) reflection.RequireAuthorization(policy);
         }
         return grpc;
     }
@@ -128,5 +134,13 @@ public static class GrpcEmbedExtensions
     private sealed class DisabledEndpoints : IEndpointConventionBuilder
     {
         public void Add(Action<EndpointBuilder> convention) { }
+    }
+
+    private sealed class CombinedEndpoints : IEndpointConventionBuilder
+    {
+        private readonly IEndpointConventionBuilder _first;
+        private readonly IEndpointConventionBuilder _second;
+        public CombinedEndpoints(IEndpointConventionBuilder first, IEndpointConventionBuilder second) { _first = first; _second = second; }
+        public void Add(Action<EndpointBuilder> convention) { _first.Add(convention); _second.Add(convention); }
     }
 }

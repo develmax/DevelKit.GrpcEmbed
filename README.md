@@ -158,7 +158,7 @@ builder.Services.AddGrpcEmbed(options =>
 });
 ```
 
-This exposes `/_grpcembed/schema.proto`, `/_grpcembed/descriptor.pb`, `/_grpcembed/schema.json`, a deterministic schema hash at `/_grpcembed`, and standard `grpc.reflection.v1alpha.ServerReflection`. Set `SchemaManifestPath` to a checked-in manifest to detect removed, renumbered, renamed, or type-changed fields during startup. Clients may set `ExpectedSchemaHash` for strict contract negotiation.
+This exposes `/_grpcembed/schema.proto`, `/_grpcembed/descriptor.pb`, `/_grpcembed/schema.json`, a deterministic schema hash at `/_grpcembed`, and standard `grpc.reflection.v1.ServerReflection` and `grpc.reflection.v1alpha.ServerReflection`. Set `SchemaManifestPath` to a checked-in manifest to detect removed, renumbered, renamed, or type-changed fields during startup. Clients may set `ExpectedSchemaHash` for strict contract negotiation. To use ordinary gRPC tools alongside REST-compatible gRPC URLs, enable `GrpcEmbed:Server:Routing:EnableNativeAliases`; see [Reflection and native aliases](docs/url-routing.md#reflection-and-native-aliases-41).
 
 For deliberate schema evolution, use `[GrpcFieldNumber(n)]` to preserve a field or parameter wire ID across a rename, and `[GrpcReservedField(n)]` on DTO types when removing fields. Reserved numbers are emitted into both `.proto` and the binary descriptor set.
 

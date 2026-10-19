@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>4.0.7</Version>
+    <Version>4.1.0</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Add opt-in numeric EventSource timing for server response serialization. Disabled diagnostics do not timestamp, emit events or add per-call serialization allocations. Preserve the 4.0.x wire format, schema hashes, authorization, audit, masking and cancellation. No end-to-end performance improvement is claimed. See CHANGELOG.md and docs/server-diagnostics.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Add Reflection v1 and v1alpha with descriptor dependency lookup, plus opt-in standard gRPC path aliases alongside existing routes. Bind Server.EnableReflection from configuration. Discovery honors Contract.AllowAnonymous; business aliases retain authorization, audit metadata and contract validation. Preserve the 4.0.x wire format and business schema hashes. See CHANGELOG.md and docs/url-routing.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

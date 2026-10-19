@@ -81,6 +81,8 @@ public sealed class GrpcEmbedRoutingOptions
 {
     public GrpcEmbedRoutingMode Mode { get; set; } = GrpcEmbedRoutingMode.Native;
     public string Prefix { get; set; } = "grpc";
+    /// <summary>Also expose canonical /GrpcEmbed.Service/Method paths when using custom routes.</summary>
+    public bool EnableNativeAliases { get; set; }
 }
 public enum GrpcEmbedContractGeneration { Startup, FirstRequest }
 
