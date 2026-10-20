@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Http;
 
 namespace GrpcEmbed.Client;
 
@@ -11,9 +10,6 @@ public static class GrpcEmbedConfiguredClientsExtensions
     /// <summary>Call once, after all existing HTTP API client registrations.</summary>
     public static IServiceCollection AddConfiguredGrpcEmbedClients<TMarker>(this IServiceCollection services, IConfiguration configuration, Func<TMarker, string> getClientName) where TMarker : class
     {
-        services.PostConfigureAll<HttpClientFactoryOptions>(options =>
-            options.HttpMessageHandlerBuilderActions.Add(builder =>
-                builder.AdditionalHandlers.Insert(0, new GrpcEmbedRouteHandler())));
         services.AddGrpcEmbedClients<TMarker>((provider, original) =>
         {
             var name = getClientName(original);
@@ -53,14 +49,25 @@ public static class GrpcEmbedConfiguredClientsExtensions
                     ? new Uri(address, "/_grpcembed/schema.json")
                     : contract.Address.IsAbsoluteUri ? contract.Address : new Uri(baseAddress, contract.Address);
                 RequireSecureAddress(contract.Address, allowUnencryptedHttp2);
+                // The private channel client owns the route adapter, not the factory's
+                // shared handlers. Keeping it outside the completed factory pipeline
+                // also places rewriting before logging/signing builder filters.
+                var hasRouteHandler = routing.Mode != GrpcEmbedRoutingMode.Native
+                    && factory.GetType().Assembly == typeof(IHttpClientFactory).Assembly
+                    && ReferenceEquals(factory, provider.GetService<IHttpMessageHandlerFactory>());
+                if (hasRouteHandler)
+                {
+                    var routed = GrpcEmbedRouteHandler.CreateClient(http,
+                        provider.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler(name));
+                    http.Dispose();
+                    http = routed;
+                }
                 var options = new GrpcEmbedClientOptions
                 {
                     Address = address,
                     HttpClient = http,
-                    // A custom factory may not execute HttpClientFactoryOptions.
-                    // Keep the existing wrapper in that case and for manually supplied clients.
-                    HttpClientHasRouteHandler = factory.GetType().Assembly == typeof(IHttpClientFactory).Assembly
-                        && ReferenceEquals(factory, provider.GetService<IHttpMessageHandlerFactory>()),
+                    // Custom factories/manual clients retain the existing wrapper.
+                    HttpClientHasRouteHandler = hasRouteHandler,
                     DisposeHttpClient = true,
                     ServiceName = serviceName,
                     Contract = contract,

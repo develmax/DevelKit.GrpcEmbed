@@ -49,10 +49,41 @@ internal static class GrpcEmbedChannelFactory
     }
 }
 
-// Runs before the named client's audit/auth handlers. Unrelated REST/schema calls
-// pass through untouched; the private route header never reaches those handlers.
+// Private to a GrpcEmbed channel, outside the complete named-client handler chain.
+// Never installed on unrelated HttpClients, including gRPC-disabled clients.
 internal sealed class GrpcEmbedRouteHandler : DelegatingHandler
 {
+    internal static HttpClient CreateClient(HttpClient configured, HttpMessageHandler sharedHandler)
+    {
+        var http = new HttpClient(new GrpcEmbedRouteHandler { InnerHandler = new BorrowedHandler(sharedHandler) });
+        try
+        {
+            http.BaseAddress = configured.BaseAddress;
+            http.Timeout = configured.Timeout;
+            http.DefaultRequestVersion = configured.DefaultRequestVersion;
+            http.DefaultVersionPolicy = configured.DefaultVersionPolicy;
+            http.MaxResponseContentBufferSize = configured.MaxResponseContentBufferSize;
+            foreach (var header in configured.DefaultRequestHeaders)
+                http.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+            return http;
+        }
+        catch { http.Dispose(); throw; }
+    }
+
+    // IHttpMessageHandlerFactory, not this channel, owns pooled handler disposal.
+    private sealed class BorrowedHandler : HttpMessageHandler
+    {
+        private readonly HttpMessageInvoker _invoker;
+        public BorrowedHandler(HttpMessageHandler handler) => _invoker = new(handler, disposeHandler: false);
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) =>
+            _invoker.SendAsync(request, token);
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _invoker.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
     {
         Rewrite(request);

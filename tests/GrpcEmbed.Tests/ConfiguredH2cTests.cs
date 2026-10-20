@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
 using Xunit;
 
 namespace GrpcEmbed.Tests;
@@ -84,6 +85,9 @@ public sealed class ConfiguredH2cTests
             }
             services.AddSingleton<IUsers>(_ => new RestClient());
             services.AddConfiguredGrpcEmbedClients<IMarker>(configuration, _ => "Existing");
+            // Builder filters can prepend signing/audit handlers after options
+            // actions have run. Routing must still happen before this handler.
+            services.AddSingleton<IHttpMessageHandlerBuilderFilter, SigningFilter>();
             await using var provider = services.BuildServiceProvider();
             var client = provider.GetRequiredService<IUsers>();
             Assert.Equal(42, (await client.GetAsync(42, timeout.Token)).Id);
@@ -97,6 +101,24 @@ public sealed class ConfiguredH2cTests
     }
 
     public interface IMarker { }
+    private sealed class SigningFilter : IHttpMessageHandlerBuilderFilter
+    {
+        public Action<HttpMessageHandlerBuilder> Configure(Action<HttpMessageHandlerBuilder> next) => builder =>
+        {
+            next(builder);
+            builder.AdditionalHandlers.Insert(0, new SigningHandler());
+        };
+    }
+    private sealed class SigningHandler : DelegatingHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            Assert.False(request.Headers.Contains(GrpcEmbedChannelFactory.PathHeader));
+            Assert.True(request.RequestUri!.AbsolutePath.StartsWith("/api/users/", StringComparison.Ordinal)
+                || request.RequestUri.AbsolutePath == "/_grpcembed/schema.json");
+            return base.SendAsync(request, token);
+        }
+    }
     // Intentionally bypasses HttpClientFactoryOptions, despite implementing both interfaces.
     private sealed class BypassingFactory(Func<HttpMessageHandler> handler, Uri address) : IHttpClientFactory, IHttpMessageHandlerFactory
     {
