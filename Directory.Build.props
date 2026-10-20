@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>4.1.0</Version>
+    <Version>4.1.1</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Add Reflection v1 and v1alpha with descriptor dependency lookup, plus opt-in standard gRPC path aliases alongside existing routes. Bind Server.EnableReflection from configuration. Discovery honors Contract.AllowAnonymous; business aliases retain authorization, audit metadata and contract validation. Preserve the 4.0.x wire format and business schema hashes. See CHANGELOG.md and docs/url-routing.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Route configured named-client gRPC calls through their existing HTTP handler pipeline without a second HttpClient.SendAsync wrapper. Preserve headers, authentication, full payload-audit hooks, masking, cancellation, ownership and route validation; custom factories and manually supplied clients retain the fallback. Compatible with the 4.x wire format and schema hashes. No universal end-to-end latency improvement is claimed. See CHANGELOG.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

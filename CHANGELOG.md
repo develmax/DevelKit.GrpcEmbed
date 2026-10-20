@@ -2,9 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## 4.1.1 — 2026-10-21
 
 - Route configured named-client calls inside their existing HTTP handler pipeline instead of forwarding them through a second `HttpClient.SendAsync`. Preserve configured headers, audit/authentication handlers, cancellation, ownership and route validation; manually supplied HTTP clients and custom factories retain the existing fallback. No protobuf wire or contract changes.
+- Preserve the 4.x schema hashes and Reflection/native-alias behavior; existing contracts do not require regeneration. This patch removes a redundant client wrapper, not a guaranteed end-to-end GET latency improvement. Controlled pilot measurements did not establish a reproducible latency gain.
 
 ## 4.1.0 — 2026-10-19
 
