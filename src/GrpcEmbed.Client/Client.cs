@@ -16,6 +16,7 @@ public sealed class GrpcEmbedClientOptions
     public GrpcEmbedClientRoutingOptions Routing { get; set; } = new();
     public GrpcEmbedClientContractOptions Contract { get; set; } = new();
     internal bool RequireHttp2ForContract { get; set; }
+    internal bool HttpClientHasRouteHandler { get; set; }
     public Uri Address { get; set; } = null!;
     public TimeSpan? DefaultTimeout { get; set; }
     public HttpMessageHandler? HttpHandler { get; set; }

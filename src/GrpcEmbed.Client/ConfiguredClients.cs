@@ -32,7 +32,8 @@ public static class GrpcEmbedConfiguredClientsExtensions
                 throw new InvalidOperationException($"{name}:Grpc:ServiceName is required when contract fetching is disabled.");
             serviceName = string.IsNullOrWhiteSpace(serviceName) ? null : serviceName;
 
-            var http = provider.GetRequiredService<IHttpClientFactory>().CreateClient(name);
+            var factory = provider.GetRequiredService<IHttpClientFactory>();
+            var http = factory.CreateClient(name);
             try
             {
                 var baseAddress = http.BaseAddress ??
@@ -48,10 +49,25 @@ public static class GrpcEmbedConfiguredClientsExtensions
                     ? new Uri(address, "/_grpcembed/schema.json")
                     : contract.Address.IsAbsoluteUri ? contract.Address : new Uri(baseAddress, contract.Address);
                 RequireSecureAddress(contract.Address, allowUnencryptedHttp2);
+                // The private channel client owns the route adapter, not the factory's
+                // shared handlers. Keeping it outside the completed factory pipeline
+                // also places rewriting before logging/signing builder filters.
+                var hasRouteHandler = routing.Mode != GrpcEmbedRoutingMode.Native
+                    && factory.GetType().Assembly == typeof(IHttpClientFactory).Assembly
+                    && ReferenceEquals(factory, provider.GetService<IHttpMessageHandlerFactory>());
+                if (hasRouteHandler)
+                {
+                    var routed = GrpcEmbedRouteHandler.CreateClient(http,
+                        provider.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler(name));
+                    http.Dispose();
+                    http = routed;
+                }
                 var options = new GrpcEmbedClientOptions
                 {
                     Address = address,
                     HttpClient = http,
+                    // Custom factories/manual clients retain the existing wrapper.
+                    HttpClientHasRouteHandler = hasRouteHandler,
                     DisposeHttpClient = true,
                     ServiceName = serviceName,
                     Contract = contract,
