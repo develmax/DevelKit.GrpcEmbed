@@ -44,23 +44,7 @@ internal class GrpcEmbedService
         var controller = _controllers.CreateController(controllerContext);
         try
         {
-            var values = new object?[method.RequestReaders.Length];
-            for (var i = 0; i < values.Length; i++) values[i] = method.RequestReaders[i](request);
-            var arguments = new object?[method.Arguments.Length];
-            for (var i = 0; i < arguments.Length; i++)
-            {
-                var plan = method.Arguments[i];
-                arguments[i] = plan.Source switch
-                {
-                    RuntimeArgumentSource.CancellationToken => call.CancellationToken,
-                    RuntimeArgumentSource.HttpContext => http,
-                    RuntimeArgumentSource.ClaimsPrincipal => http.User,
-                    RuntimeArgumentSource.HttpRequest => http.Request,
-                    RuntimeArgumentSource.HttpResponse => http.Response,
-                    RuntimeArgumentSource.Services => http.RequestServices.GetRequiredService(plan.Parameter.ParameterType),
-                    _ => values[plan.TransportIndex]
-                };
-            }
+            var arguments = BindArguments(method, request, http, call.CancellationToken);
             Validate(arguments, method.Arguments);
             var filters = CreateRequestFilters(method.Action.FilterDescriptors, http.RequestServices);
             // MVC contexts share one mutable list within the request. The execution
@@ -99,6 +83,29 @@ internal class GrpcEmbedService
         catch (OperationCanceledException) { throw new RpcException(new Status(StatusCode.Cancelled, "Request cancelled.")); }
         catch (Exception ex) { _logger.LogError(ex, "GrpcEmbed MVC action {Action} failed.", method.Action.DisplayName); throw new RpcException(new Status(StatusCode.Internal, _options.EnableDetailedErrors ? ex.Message : "The MVC action failed.")); }
         finally { _controllers.ReleaseController(controllerContext, controller); }
+    }
+
+    internal static object?[] BindArguments(RuntimeMethod method, object request, HttpContext http, CancellationToken token)
+    {
+        // RequestReaders read only generated envelope fields. Bind directly into
+        // the mutable MVC argument array instead of allocating/copying a second
+        // transport-only array on every call. Scoped services remain per request.
+        var arguments = new object?[method.Arguments.Length];
+        for (var i = 0; i < arguments.Length; i++)
+        {
+            var plan = method.Arguments[i];
+            arguments[i] = plan.Source switch
+            {
+                RuntimeArgumentSource.CancellationToken => token,
+                RuntimeArgumentSource.HttpContext => http,
+                RuntimeArgumentSource.ClaimsPrincipal => http.User,
+                RuntimeArgumentSource.HttpRequest => http.Request,
+                RuntimeArgumentSource.HttpResponse => http.Response,
+                RuntimeArgumentSource.Services => http.RequestServices.GetRequiredService(plan.Parameter.ParameterType),
+                _ => method.RequestReaders[plan.TransportIndex](request)
+            };
+        }
+        return arguments;
     }
 
     internal static IFilterMetadata[] CreateRequestFilters(IList<FilterDescriptor> descriptors, IServiceProvider services)
