@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>4.1.1</Version>
+    <Version>4.1.2</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Route configured named-client gRPC calls through their existing HTTP handler pipeline without a second HttpClient.SendAsync wrapper. Preserve headers, authentication, full payload-audit hooks, masking, cancellation, ownership and route validation; custom factories and manually supplied clients retain the fallback. Compatible with the 4.x wire format and schema hashes. No universal end-to-end latency improvement is claimed. See CHANGELOG.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Preserve parsed standard default Authorization headers in private configured clients, bind MVC arguments without a redundant transport array, and cache routed operation names. Preserve request-specific authentication, scoped service resolution, validation, full payload audit, masking, cancellation and route/contract guards. Compatible with the 4.x wire format and schema hashes; no end-to-end GET latency improvement is guaranteed. See CHANGELOG.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
