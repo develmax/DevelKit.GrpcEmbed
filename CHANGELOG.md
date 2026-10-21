@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+- Preserve an already parsed standard default `Authorization` header when creating a private named-client channel. Avoid reparsing its formatted string on each request; request-specific authentication remains authoritative, and malformed, multi-valued or custom header subclasses retain the existing copy behavior. No wire, contract, authentication, audit or masking policy changes; no guaranteed business-latency improvement is claimed.
+
 ## 4.1.1 — 2026-10-21
 
 - Route configured named-client calls inside their existing HTTP handler pipeline instead of forwarding them through a second `HttpClient.SendAsync`. Preserve configured headers, audit/authentication handlers, cancellation, ownership and route validation; manually supplied HTTP clients and custom factories retain the existing fallback. No protobuf wire or contract changes.
