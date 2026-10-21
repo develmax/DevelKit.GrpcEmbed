@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.1.2 — 2026-10-21
+
 - Bind transported MVC arguments directly into the per-call action argument array, removing a redundant request-value array. Resolve injected services and cancellation from the current request as before; validation and filter execution remain unchanged.
 - Prepare the routed operation name in immutable endpoint metadata instead of concatenating it for every gRPC route match. Keep operation-header checks, route/body agreement and contract protection unchanged. These remove small allocations; no end-to-end latency improvement is assumed.
 - Preserve an already parsed standard default `Authorization` header when creating a private named-client channel. Avoid reparsing its formatted string on each request; request-specific authentication remains authoritative, and malformed, multi-valued or custom header subclasses retain the existing copy behavior. No wire, contract, authentication, audit or masking policy changes; no guaranteed business-latency improvement is claimed.
