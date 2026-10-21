@@ -10,10 +10,12 @@ namespace GrpcEmbed.AspNetCore;
 internal sealed class GrpcEmbedRouteMetadata
 {
     public RuntimeMethod Method { get; }
+    public string Operation { get; }
     private readonly (string Name, int Index, System.ComponentModel.TypeConverter Converter, object? Default)[] _bindings;
     public GrpcEmbedRouteMetadata(RuntimeMethod method, RoutePattern pattern)
     {
         Method = method;
+        Operation = "GrpcEmbed." + method.ServiceName + "/" + method.MethodName;
         _bindings = pattern.Parameters.Select(parameter =>
         {
             var descriptor = method.Action.Parameters.OfType<Microsoft.AspNetCore.Mvc.Controllers.ControllerParameterDescriptor>()
@@ -105,7 +107,7 @@ internal sealed class GrpcEmbedRouteSelectionPolicy : MatcherPolicy, IEndpointSe
                     candidates[i].Endpoint.Metadata.GetMetadata<Grpc.AspNetCore.Server.GrpcMethodMetadata>() is null)
                     candidates.SetValidity(i, false);
             }
-            else if (!grpc || operation.Count != 1 || operation[0] != "GrpcEmbed." + metadata.Method.ServiceName + "/" + metadata.Method.MethodName)
+            else if (!grpc || operation.Count != 1 || operation[0] != metadata.Operation)
                 candidates.SetValidity(i, false);
         }
         return Task.CompletedTask;
