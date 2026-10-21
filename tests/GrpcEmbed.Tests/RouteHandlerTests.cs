@@ -9,6 +9,53 @@ namespace GrpcEmbed.Tests;
 public sealed class RouteHandlerTests
 {
     [Fact]
+    public async Task Private_client_preserves_parsed_default_authorization_and_per_request_override()
+    {
+        using var leaf = new AuthorizationRecordingHandler();
+        using var configured = new HttpClient(leaf, disposeHandler: false);
+        var authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", new string('x', 2048));
+        configured.DefaultRequestHeaders.Authorization = authorization;
+        using var channel = GrpcEmbedRouteHandler.CreateClient(configured, leaf);
+        // A string copy reparses and allocates a new value when this is read.
+        Assert.Same(authorization, channel.DefaultRequestHeaders.Authorization);
+        using (await channel.GetAsync("https://example.test/schema"))
+            Assert.Equal(authorization.Parameter, leaf.Authorization!.Parameter);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://example.test/native");
+        request.Headers.Add(GrpcEmbedChannelFactory.PathHeader, "/api/users/42");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "per-call");
+        using (await channel.SendAsync(request))
+            Assert.Equal("per-call", leaf.Authorization!.Parameter);
+        Assert.Same(authorization, configured.DefaultRequestHeaders.Authorization);
+        Assert.Same(authorization, channel.DefaultRequestHeaders.Authorization);
+        using (await channel.GetAsync("https://example.test/schema"))
+            Assert.Equal(authorization.Parameter, leaf.Authorization!.Parameter);
+    }
+
+    [Theory]
+    [InlineData("@@@")]
+    [InlineData("Bearer one", "Bearer two")]
+    public void Private_client_keeps_invalid_or_multiple_authorization_values(params string[] values)
+    {
+        using var leaf = new RecordingHandler();
+        using var configured = new HttpClient(leaf, disposeHandler: false);
+        Assert.True(configured.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", values));
+        using var channel = GrpcEmbedRouteHandler.CreateClient(configured, leaf);
+        Assert.Equal(values, channel.DefaultRequestHeaders.NonValidated["Authorization"].ToArray());
+    }
+
+    [Fact]
+    public void Private_client_does_not_retain_a_mutable_authorization_subclass()
+    {
+        using var leaf = new RecordingHandler();
+        using var configured = new HttpClient(leaf, disposeHandler: false);
+        var authorization = new MutableAuthorizationValue { Text = "Bearer original" };
+        configured.DefaultRequestHeaders.Authorization = authorization;
+        using var channel = GrpcEmbedRouteHandler.CreateClient(configured, leaf);
+        authorization.Text = "Bearer changed";
+        Assert.Equal("Bearer original", channel.DefaultRequestHeaders.NonValidated["Authorization"].ToString());
+    }
+
+    [Fact]
     public async Task Unrelated_named_client_does_not_rewrite_a_caller_supplied_header()
     {
         using var leaf = new RecordingHandler();
@@ -97,6 +144,22 @@ public sealed class RouteHandlerTests
         Assert.False(GrpcEmbedRouteHandler.Rewrite(request));
         Assert.Same(uri, request.RequestUri);
         Assert.Equal(HttpMethod.Get, request.Method);
+    }
+
+    private sealed class MutableAuthorizationValue() : System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "unused")
+    {
+        public string Text { get; set; } = "";
+        public override string ToString() => Text;
+    }
+
+    private sealed class AuthorizationRecordingHandler : HttpMessageHandler
+    {
+        public System.Net.Http.Headers.AuthenticationHeaderValue? Authorization { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            Authorization = request.Headers.Authorization;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }
     }
 
     private sealed class RecordingHandler : HttpMessageHandler

@@ -65,6 +65,22 @@ internal sealed class GrpcEmbedRouteHandler : DelegatingHandler
             http.MaxResponseContentBufferSize = configured.MaxResponseContentBufferSize;
             foreach (var header in configured.DefaultRequestHeaders)
                 http.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+            // TryAddWithoutValidation stores formatted strings, even when the source
+            // already owns a parsed Authorization value. Preserve that immutable
+            // header once so each cloned request need not parse a long bearer token
+            // again when an authentication/audit handler reads it. Malformed or
+            // multi-valued headers retain the original raw-copy behavior.
+            if (configured.DefaultRequestHeaders.NonValidated.TryGetValues("Authorization", out var authorizationValues)
+                && authorizationValues.Count == 1)
+            {
+                try
+                {
+                    if (configured.DefaultRequestHeaders.Authorization is { } authorization
+                        && authorization.GetType() == typeof(System.Net.Http.Headers.AuthenticationHeaderValue))
+                        http.DefaultRequestHeaders.Authorization = authorization;
+                }
+                catch (FormatException) { /* Keep the existing unvalidated copy. */ }
+            }
             return http;
         }
         catch { http.Dispose(); throw; }
