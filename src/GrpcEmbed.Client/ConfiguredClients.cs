@@ -58,7 +58,8 @@ public static class GrpcEmbedConfiguredClientsExtensions
                 if (hasRouteHandler)
                 {
                     var routed = GrpcEmbedRouteHandler.CreateClient(http,
-                        provider.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler(name));
+                        provider.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler(name),
+                        address.GetLeftPart(UriPartial.Authority));
                     http.Dispose();
                     http = routed;
                 }
