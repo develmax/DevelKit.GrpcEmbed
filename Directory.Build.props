@@ -7,10 +7,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Authors>GrpcEmbed contributors</Authors>
-    <Version>4.1.2</Version>
+    <Version>4.1.3</Version>
     <PackageProjectUrl>https://github.com/develmax/DevelKit.GrpcEmbed</PackageProjectUrl>
     <PackageIcon>grpcembed-icon.png</PackageIcon>
-    <PackageReleaseNotes>Preserve parsed standard default Authorization headers in private configured clients, bind MVC arguments without a redundant transport array, and cache routed operation names. Preserve request-specific authentication, scoped service resolution, validation, full payload audit, masking, cancellation and route/contract guards. Compatible with the 4.x wire format and schema hashes; no end-to-end GET latency improvement is guaranteed. See CHANGELOG.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>Cache the immutable configured channel origin instead of rebuilding it for every routed call. Preserve per-call paths, separate schema addresses, authentication, payload audit and masking hooks, cancellation, timeouts and handler ownership. Compatible with the 4.x wire format and schema hashes. This removes a small allocation; no stable end-to-end GET latency improvement is claimed. See CHANGELOG.md.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>grpc;aspnetcore;protobuf;mvc;rpc</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
