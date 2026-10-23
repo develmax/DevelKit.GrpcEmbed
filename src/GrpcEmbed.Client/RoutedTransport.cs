@@ -53,9 +53,12 @@ internal static class GrpcEmbedChannelFactory
 // Never installed on unrelated HttpClients, including gRPC-disabled clients.
 internal sealed class GrpcEmbedRouteHandler : DelegatingHandler
 {
-    internal static HttpClient CreateClient(HttpClient configured, HttpMessageHandler sharedHandler)
+    private readonly string? _origin;
+    internal GrpcEmbedRouteHandler(string? origin = null) => _origin = origin;
+
+    internal static HttpClient CreateClient(HttpClient configured, HttpMessageHandler sharedHandler, string? origin = null)
     {
-        var http = new HttpClient(new GrpcEmbedRouteHandler { InnerHandler = new BorrowedHandler(sharedHandler) });
+        var http = new HttpClient(new GrpcEmbedRouteHandler(origin) { InnerHandler = new BorrowedHandler(sharedHandler) });
         try
         {
             http.BaseAddress = configured.BaseAddress;
@@ -102,7 +105,7 @@ internal sealed class GrpcEmbedRouteHandler : DelegatingHandler
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
     {
-        Rewrite(request);
+        Rewrite(request, _origin);
         return base.SendAsync(request, token);
     }
 

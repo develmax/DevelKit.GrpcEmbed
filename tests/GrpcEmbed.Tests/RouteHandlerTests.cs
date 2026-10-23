@@ -9,6 +9,47 @@ namespace GrpcEmbed.Tests;
 public sealed class RouteHandlerTests
 {
     [Fact]
+    public async Task Fixed_channel_origin_preserves_schema_address_and_request_specific_paths()
+    {
+        using var leaf = new RecordingHandler();
+        using var configured = new HttpClient(leaf, disposeHandler: false) { BaseAddress = new Uri("https://schema.test:8443/base/") };
+        using var channel = GrpcEmbedRouteHandler.CreateClient(configured, leaf, "https://rpc.test:7443");
+        using (await channel.GetAsync("https://schema.test:8443/schema?version=1"))
+            Assert.Equal("https://schema.test:8443/schema?version=1", leaf.Uri!.AbsoluteUri);
+        foreach (var path in new[] { "/application/api/users/42", "/application/api/users/73" })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://rpc.test:7443/GrpcEmbed.Users/Get");
+            request.Headers.Add(GrpcEmbedChannelFactory.PathHeader, path);
+            using var response = await channel.SendAsync(request);
+            Assert.Equal("https://rpc.test:7443" + path, leaf.Uri!.AbsoluteUri);
+            Assert.False(leaf.PrivateHeader);
+        }
+        Assert.Equal(3, leaf.Calls);
+    }
+
+    [Fact]
+    public void Fixed_channel_origin_avoids_per_call_authority_string_allocation()
+    {
+        const string origin = "https://service.namespace.example.test:7443";
+        var native = new Uri(origin + "/GrpcEmbed.Users/Get");
+        long Measure(string? cachedOrigin)
+        {
+            var start = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < 1000; i++)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, native);
+                request.Headers.Add(GrpcEmbedChannelFactory.PathHeader, "/api/users/42");
+                Assert.True(GrpcEmbedRouteHandler.Rewrite(request, cachedOrigin));
+            }
+            return GC.GetAllocatedBytesForCurrentThread() - start;
+        }
+        _ = Measure(null); _ = Measure(origin);
+        var control = Measure(null);
+        var candidate = Measure(origin);
+        Assert.True(control - candidate >= 32_000, $"Expected at least 32 bytes saved per routed call: {control} vs {candidate}.");
+    }
+
+    [Fact]
     public async Task Private_client_preserves_parsed_default_authorization_and_per_request_override()
     {
         using var leaf = new AuthorizationRecordingHandler();
