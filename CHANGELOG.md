@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 4.1.3 — 2026-10-23
+
+- Cache the immutable origin of configured client channels rather than rebuilding the authority string on every routed call. Keep request-specific paths and route validation unchanged; schema discovery may still use a separate authority. Manually supplied clients and custom factories retain the dynamic-origin fallback.
+- Preserve authentication, full payload audit and masking hooks, cancellation, timeouts, handler ownership, public API, 4.x wire format and schema hashes. Existing contracts do not require regeneration. Regression tests cover varying request paths and separate schema/RPC authorities. A small allocation reduction is confirmed; a stable end-to-end business-GET latency improvement is not claimed.
+
 ## 4.1.2 — 2026-10-21
 
 - Bind transported MVC arguments directly into the per-call action argument array, removing a redundant request-value array. Resolve injected services and cancellation from the current request as before; validation and filter execution remain unchanged.
